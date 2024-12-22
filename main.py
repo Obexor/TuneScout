@@ -1,11 +1,16 @@
 from pipeline.audio_processing import record_audio
 from pipeline.hashing import generate_hashes
 from pipeline.database import DatabaseManager
-from pipeline.config import DB_PATH
 import streamlit as st
 
-# Initialize the database manager with the specified database path
-db_manager = DatabaseManager(DB_PATH)
+# AWS credentials and DynamoDB table name
+aws_access_key_id = 'AKIA5CBDRHXJNKCGQ4WJ'
+aws_secret_access_key = '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'
+region_name = 'eu-north-1'
+table_name = 'SongsFingerprints'
+
+# Initialize the database manager with the specified AWS credentials and table name
+db_manager = DatabaseManager(aws_access_key_id, aws_secret_access_key, region_name, table_name)
 
 # Set the title of the Streamlit web app
 st.title("Song Recognition Pipeline")
@@ -20,10 +25,10 @@ if uploaded_file:
         "title": "Uploaded Song",  # Title of the song (placeholder)
         "album": "Unknown Album"  # Name of the album (placeholder)
     }
-    
+
     # Generate hashes from the uploaded audio file
     hashes = generate_hashes(uploaded_file)
-    
+
     # Store the song and its hashes in the database
     if db_manager.store_song(song_data, hashes):
         # Success message if the song was stored
