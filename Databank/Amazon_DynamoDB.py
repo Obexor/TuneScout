@@ -1,68 +1,66 @@
 import boto3
 
-# your_access_key = 'AKIA5CBDRHXJNKCGQ4WJ'
-# your_secret_key = '6tM0ELbIx1kdhDhQptoMAaTkCDAriwefAqNEJEnk'
-# region = 'eu-north-1'
 
-# Initialize DynamoDB client
-dynamodb = boto3.client(   'dynamodb',
-            aws_access_key_id='AKIA5CBDRHXJNKCGQ4WJ',
-            aws_secret_access_key='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',
-            region_name='eu-north-1'
-                           )
-
-try:
-    # List tables
-    response = dynamodb.list_tables()
-    print("Connection successful. DynamoDB tables:", response['TableNames'])
-except Exception as e:
-    print("Connection failed:", e)
-
-# Initialize DynamoDB resource
-dynamodb = boto3.resource(
-            'dynamodb',
-            aws_access_key_id='AKIA5CBDRHXJNKCGQ4WJ',
-            aws_secret_access_key='6tM0ELbIx1kdhDhQptoMAaTkCDAriwefAqNEJEnk',
-            region_name='eu-north-1'
-                            )
-# Access your table
-table_name = 'SongsFingerprints'
-table = dynamodb.Table(table_name)
-
-# Insert an item
-item = {
-    "SongID": "12345",
-    "fingerprint": "[0.1, 0.2, 0.3, 0.4]",
-    "metadata": {
-        "title": "Song Title",
-        "artist": "Artist Name",
-        "album": "Album Name",
-        "duration": 180  # Duration in seconds
-    }
-}
-
-# Insert the item into the table
-table.put_item(Item=item)
-print("Data inserted successfully.")
-
-# Fetch the item
-response = table.get_item(Key={"SongID": "12345"})
-if "Item" in response:
-    print("Retrieved data:", response["Item"])
-
-# Update the item
-table.update_item(
-    Key={"SongID": "12345"},
-    UpdateExpression="SET metadata.#genre = :genre",
-    ExpressionAttributeNames={"#genre": "genre"},
-    ExpressionAttributeValues={":genre": "Pop"},
-    ReturnValues="UPDATED_NEW"
-)
-print("Data updated successfully.")
-
-# Delete the item
-# table.delete_item(Key={"SongID": "12345"})
-# print("Data deleted successfully.")
+# Initialize a DynamoDB client
+def initialize_dynamodb_client(aws_access_key_id, aws_secret_access_key, region_name):
+    return boto3.client(
+        'dynamodb',
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        region_name=region_name
+    )
 
 
+# Initialize a DynamoDB resource
+def initialize_dynamodb_resource(aws_access_key_id, aws_secret_access_key, region_name):
+    return boto3.resource(
+        'dynamodb',
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        region_name=region_name
+    )
 
+
+# Test connectivity by listing tables
+def test_connectivity(dynamodb_client):
+    try:
+        response = dynamodb_client.list_tables()
+        print("Connection successful. DynamoDB tables:", response['TableNames'])
+    except Exception as e:
+        print("Connection failed:", e)
+
+
+# Insert an item into a DynamoDB table
+def insert_item(dynamodb_resource, table_name, item):
+    table = dynamodb_resource.Table(table_name)
+    table.put_item(Item=item)
+    print("Data inserted successfully.")
+
+
+# Fetch an item from a DynamoDB table
+def fetch_item(dynamodb_resource, table_name, key):
+    table = dynamodb_resource.Table(table_name)
+    response = table.get_item(Key=key)
+    if "Item" in response:
+        print("Retrieved data:", response["Item"])
+
+
+# Update an item in a DynamoDB table
+def update_item(dynamodb_resource, table_name, key, update_expression, expression_attribute_names,
+                expression_attribute_values):
+    table = dynamodb_resource.Table(table_name)
+    table.update_item(
+        Key=key,
+        UpdateExpression=update_expression,
+        ExpressionAttributeNames=expression_attribute_names,
+        ExpressionAttributeValues=expression_attribute_values,
+        ReturnValues="UPDATED_NEW"
+    )
+    print("Data updated successfully.")
+
+
+# Delete an item from a DynamoDB table
+def delete_item(dynamodb_resource, table_name, key):
+    table = dynamodb_resource.Table(table_name)
+    table.delete_item(Key=key)
+    print("Data deleted successfully.")
