@@ -1,0 +1,22 @@
+[project]
+name = "TuneScout"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "lennypoell", email = "pl5525@mci4me.at"},
+]
+dependencies = [
+    "streamlit>=1.41.1",
+    "tinydb>=4.8.2",
+    "tinydb-serialization>=2.2.0",
+    "pyaudio>=0.2.14",
+    "numpy>=2.2.1",
+    "pytube>=15.0.0",
+]
+requires-python = "==3.13.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false
