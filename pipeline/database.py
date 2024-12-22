@@ -3,21 +3,24 @@ from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 
 class DatabaseManager:
     def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name):
-        # Initialize the AmazonDBConnectivity instance
         self.db = ADC(aws_access_key_id, aws_secret_access_key, region_name)
         self.table_name = table_name
+        self.current_song_id = 0  # Initialize the current song ID
 
     def store_song(self, song_data, hashes):
-        # Check if the song already exists in the database using its song_id
-        existing_song = self.fetch_item({"song_id": song_data['song_id']})
-        if not existing_song:
-            # If the song does not exist, insert its metadata into the DynamoDB table
-            self.db.insert_item(self.table_name, song_data)
+        # Increment the song ID for each new song
+        self.current_song_id += 1
+        song_data["SongID"] = str(self.current_song_id)
 
-            # Store the associated hashes in the DynamoDB table
-            self.store_hashes(hashes)
-            return True  # Return True to indicate the song was successfully stored
-        return False  # Return False if the song already exists
+        # Store the song metadata
+        self.db.insert_item(self.table_name, song_data)
+
+        # Store the hashes with the updated song ID
+        for hash_item in hashes:
+            hash_item["SongID"] = song_data["SongID"]
+            self.db.insert_item(self.table_name, hash_item)
+
+        return True
 
     def store_hashes(self, hashes):
         # Insert multiple hashes into the DynamoDB table

@@ -27,7 +27,7 @@ if uploaded_file:
     }
 
     # Generate hashes from the uploaded audio file
-    hashes = generate_hashes(uploaded_file)
+    hashes = generate_hashes(uploaded_file,db_manager.current_song_id + 1, song_data["artist"], song_data["title"], song_data["album"])
 
     # Store the song and its hashes in the database
     if db_manager.store_song(song_data, hashes):
