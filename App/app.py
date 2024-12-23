@@ -2,15 +2,17 @@ import streamlit as st
 from pipeline.database import DatabaseManager
 from pipeline.audio_processing import record_audio
 from pipeline.hashing import generate_hashes
+from Databank.Amazon_S3 import S3Manager
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 
 class StreamlitApp:
-    def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name):
+    def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name):
         try:
             self.db_manager = DatabaseManager(aws_access_key_id, aws_secret_access_key, region_name, table_name)
+            self.s3_manager = S3Manager(aws_access_key_id, aws_secret_access_key, region_name, bucket_name)
             self.table_name = table_name
         except (NoCredentialsError, PartialCredentialsError) as e:
-            st.error(f"Failed to initialize DatabaseManager: {e}")
+            st.error(f"Failed to initialize DatabaseManager or S3Manager: {e}")
 
     def add_fingerprint(self, song_id, fingerprint, metadata):
         try:
@@ -67,6 +69,8 @@ class StreamlitApp:
                 hashes = generate_hashes(uploaded_file, self.db_manager.current_song_id + 1, song_data["artist"], song_data["title"], song_data["album"])
                 if self.db_manager.store_song(song_data, hashes):
                     st.success("Song stored in the database.")
+                    self.s3_manager.upload_file(uploaded_file.name, f"songs/{uploaded_file.name}")
+                    st.success("Song uploaded to S3.")
                 else:
                     st.warning("Song already exists.")
             except Exception as e:
@@ -77,6 +81,8 @@ class StreamlitApp:
             try:
                 record_audio("recorded.wav", 5)
                 st.success("Recording complete.")
+                self.s3_manager.upload_file("recorded.wav", "songs/recorded.wav")
+                st.success("Recorded audio uploaded to S3.")
             except Exception as e:
                 st.error(f"Failed to record audio: {e}")
 

@@ -34,3 +34,5 @@ def record_audio(output_file, duration=5):
         wf.setsampwidth(audio.get_sample_size(FORMAT))  # Set the sample width
         wf.setframerate(RATE)  # Set the frame rate (sampling rate)
         wf.writeframes(b''.join(frames))  # Write audio frames to the file
+
+    
