@@ -41,7 +41,8 @@ class StreamlitApp:
             response = self.db_manager.db.dynamodb_resource.Table(self.table_name).scan()
             return response.get("Items", [])
         except ClientError as e:
-            return f"Failed to list records: {e.response['Error']['Message']}"
+            print(f"Failed to list records: {e.response['Error']['Message']}")
+            return []
 
     def compare_song(self, hashes):
         try:
@@ -66,25 +67,32 @@ class StreamlitApp:
                     "title": "Uploaded Song",
                     "album": "Unknown Album"
                 }
-                hashes = generate_hashes(uploaded_file, self.db_manager.current_song_id + 1, song_data["artist"], song_data["title"], song_data["album"])
-                if self.db_manager.store_song(song_data, hashes):
-                    st.success("Song stored in the database.")
-                    self.s3_manager.upload_file(uploaded_file.name, f"songs/{uploaded_file.name}")
-                    st.success("Song uploaded to S3.")
+                song_id = self.db_manager.get_latest_song_id() + 1
+                fingerprints = generate_hashes(uploaded_file, song_id, song_data["artist"], song_data["title"], song_data["album"])
+
+                if fingerprints:  # Proceed only if fingerprint generation was successful
+                    # Store fingerprints and metadata in DynamoDB
+                    if self.db_manager.store_song(song_data, fingerprints):
+                        st.success("Song stored in the database.")
+                        self.s3_manager.upload_file(uploaded_file.name, f"songs/{uploaded_file.name}")
+                        st.success("Song uploaded to S3.")
+                    else:
+                        st.warning("Song already exists.")
                 else:
-                    st.warning("Song already exists.")
+                    st.error("Failed to generate fingerprints.")
             except Exception as e:
                 st.error(f"Failed to process uploaded song: {e}")
 
-        st.header("Record Audio")
-        if st.button("Record Audio"):
+        st.header("All Songs and Fingerprints")
+        if st.button("List All Songs"):
             try:
-                record_audio("recorded.wav", 5)
-                st.success("Recording complete.")
-                self.s3_manager.upload_file("recorded.wav", "songs/recorded.wav")
-                st.success("Recorded audio uploaded to S3.")
+                records = self.list_all_records()
+                if records:
+                    st.write(records)
+                else:
+                    st.warning("No records found.")
             except Exception as e:
-                st.error(f"Failed to record audio: {e}")
+                st.error(f"Failed to fetch records: {e}")
 
         st.header("All Records in the Table")
         if st.button("List All Records"):
