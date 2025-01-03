@@ -4,8 +4,22 @@ from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
 
-
 class StreamlitApp:
+    """
+    Handles functionalities for a Streamlit-based song recognition and streaming application.
+
+    The class provides methods for uploading songs with metadata, comparing uploaded or
+    recorded songs against a database, and streaming available songs. It relies on an
+    Amazon DynamoDB-based database manager (ADC) and an Amazon S3 manager for storage/streaming.
+
+    :ivar db_manager: Manages database operations, including storing/retrieving song metadata
+        and fingerprint data in DynamoDB.
+    :type db_manager: ADC
+    :ivar bucket_name: Name of the S3 bucket used for song file storage.
+    :type bucket_name: str
+    :ivar s3_manager: Manages S3 operations, such as uploading and streaming song files.
+    :type s3_manager: S3Manager
+    """
     def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name):
         self.db_manager = ADC(aws_access_key_id, aws_secret_access_key, region_name, table_name)
         self.bucket_name = bucket_name
@@ -97,7 +111,13 @@ class StreamlitApp:
                     match = self.db_manager.find_song_by_hashes(compare_hashes)
                     if match:
                         st.success("Match found!")
-                        st.json(match)  # Display matched metadata
+                        title = match.get('Title', 'Unknown Title')
+                        artist = match.get('Artist', 'Unknown Artist')
+                        album = match.get('Album', 'Unknown Album')
+                        st.subheader(f"**Title**: {title}")
+                        st.write(f"**Artist**: {artist}")
+                        st.write(f"**Album**: {album}")
+
                     else:
                         st.warning("No match found.")
                 except Exception as e:
@@ -114,7 +134,12 @@ class StreamlitApp:
                     match = self.db_manager.find_song_by_hashes(compare_hashes)
                     if match:
                         st.success("Match found!")
-                        st.json(match)  # Display matched metadata
+                        title = match.get('Title', 'Unknown Title')
+                        artist = match.get('Artist', 'Unknown Artist')
+                        album = match.get('Album', 'Unknown Album')
+                        st.subheader(f"**Title**: {title}")
+                        st.write(f"**Artist**: {artist}")
+                        st.write(f"**Album**: {album}")
                     else:
                         st.warning("No match found.")
             except Exception as e:

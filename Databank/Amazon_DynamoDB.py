@@ -2,6 +2,24 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 class AmazonDBConnectivity:
+    """
+    Class for managing connectivity and operations with an Amazon DynamoDB table.
+
+    This class provides methods to perform common operations on a DynamoDB table,
+    such as inserting, fetching, updating, and deleting items. It also supports
+    custom functionality for managing songs and their associated hashes in a
+    DynamoDB table. Users must provide AWS credentials, the region, and the table
+    name to establish a connection.
+
+    :ivar dynamodb_client: Low-level DynamoDB client used for certain operations.
+    :type dynamodb_client: botocore.client.DynamoDB
+    :ivar dynamodb_resource: High-level DynamoDB resource providing table-based operations.
+    :type dynamodb_resource: boto3.resources.factory.dynamodb.ServiceResource
+    :ivar table_name: Name of the DynamoDB table on which operations are performed.
+    :type table_name: str
+    :ivar current_song_id: Counter for tracking the latest song ID used in the table.
+    :type current_song_id: int
+    """
     def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name):
         self.dynamodb_client = boto3.client(
             'dynamodb',

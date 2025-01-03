@@ -2,6 +2,19 @@ import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 
 class S3Manager:
+    """
+    Manager class for interacting with an Amazon S3 bucket.
+
+    This class provides methods to upload files to, download files from, and
+    generate pre-signed URLs for objects in an S3 bucket. It is initialized
+    with AWS credentials and basic configuration details, enabling interaction
+    with the specified S3 bucket.
+
+    :ivar s3: Boto3 client used to communicate with Amazon S3.
+    :type s3: botocore.client.BaseClient
+    :ivar bucket_name: Name of the S3 bucket to manage.
+    :type bucket_name: str
+    """
     def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, bucket_name):
         try:
             self.s3 = boto3.client(
