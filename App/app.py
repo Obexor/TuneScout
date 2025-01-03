@@ -33,7 +33,8 @@ class StreamlitApp:
                 song_data = {
                     "artist": artist.strip() or "Unknown",
                     "title": title.strip() or "Unknown Title",
-                    "album": album.strip() or "Unknown Album"
+                    "album": album.strip() or "Unknown Album",
+                    "s3_key": f"songs/{uploaded_file.name}"
                 }
                 st.info(
                     f"Processing: Title='{song_data['title']}', Artist='{song_data['artist']}', Album='{song_data['album']}'")
@@ -48,7 +49,8 @@ class StreamlitApp:
                     song_id,
                     song_data["artist"],
                     song_data["title"],
-                    song_data["album"]
+                    song_data["album"],
+                    song_data["s3_key"]
                 )
 
                 if not fingerprints:
@@ -125,26 +127,34 @@ class StreamlitApp:
         if st.button("List Songs"):
             try:
                 # Use self.db_manager to call the list_all_records method
-                songs = self.db_manager.list_all_records()
+                songs = self.db_manager.fetch_item()
 
                 if songs:
                     st.info("Songs found in the database:")
+
                     for index, song in enumerate(songs):
-                        title = song.get('title', 'Unknown Title')
-                        artist = song.get('artist', 'Unknown Artist')
+                        # Fetch and display full metadata
+                        title = song.get('Title', 'Unknown Title')
+                        artist = song.get('Artist', 'Unknown Artist')
+                        album = song.get('Album', 'Unknown Album')
+                        s3_key = song.get('s3_key')
 
-                        # Display the song metadata
-                        st.write(f"Title: {title}, Artist: {artist}")
+                        # Warn if required fields are missing
+                        if not s3_key:
+                            st.warning(f"Missing S3 key for song '{title}' at index {index}")
+                            continue
 
-                        # Add a button to stream each song
-                        if st.button(f"Stream {title}",
-                                     key=f"stream-{title}-{index}"):  # Add index to ensure uniqueness
-                            # Generate pre-signed URL for the song on S3
-                            s3_key = f"songs/{title}.mp3"  # Make sure the key matches your S3 structure
-                            song_uri = self.s3_manager.get_presigned_url(s3_key)  # Get pre-signed URL
+                        # Display song metadata in a structured way
+                        st.subheader(f"Song {index + 1}")
+                        st.write(f"**Title**: {title}")
+                        st.write(f"**Artist**: {artist}")
+                        st.write(f"**Album**: {album}")
 
+                        # Add a button for streaming
+                        if st.button(f"Stream {title}", key=f"stream-{index}"):
+                            song_uri = self.s3_manager.get_presigned_url(s3_key)
                             if song_uri:
-                                st.audio(song_uri)  # Use Streamlit's audio player to play the song
+                                st.audio(song_uri)
                             else:
                                 st.error(f"Failed to stream the song: {title}")
                 else:

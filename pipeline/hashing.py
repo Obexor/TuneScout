@@ -2,7 +2,7 @@ import hashlib
 import wave
 import numpy as np
 
-def generate_hashes(audio_file, song_id, artist, title, album):
+def generate_hashes(audio_file, song_id, artist, title, album, s3_key):
     try:
         # Open the audio file using the wave module
         with wave.open(audio_file, 'rb') as wf:
@@ -18,7 +18,7 @@ def generate_hashes(audio_file, song_id, artist, title, album):
         return [
             {
                 "Hash": fingerprint,
-                "Offset": "0",
+                "s3_key": s3_key,
                 "SongID": song_id,
                 "Artist": artist,
                 "Title": title,
