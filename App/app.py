@@ -1,44 +1,19 @@
-import streamlit as st
-from pipeline.database import DatabaseManager
-from pipeline.audio_processing import record_audio
+from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
+from botocore.exceptions import ClientError
 from pipeline.hashing import generate_hashes
+from pipeline.audio_processing import record_audio
 from Databank.Amazon_S3 import S3Manager
-from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+import streamlit as st
 
 class StreamlitApp:
     def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name):
-        try:
-            self.db_manager = DatabaseManager(aws_access_key_id, aws_secret_access_key, region_name, table_name)
-            self.s3_manager = S3Manager(aws_access_key_id, aws_secret_access_key, region_name, bucket_name)
-            self.table_name = table_name
-        except (NoCredentialsError, PartialCredentialsError) as e:
-            st.error(f"Failed to initialize DatabaseManager or S3Manager: {e}")
-
-    def add_fingerprint(self, song_id, fingerprint, metadata):
-        try:
-            item = {
-                "SongID": song_id,
-                "fingerprint": fingerprint,
-                "metadata": metadata,
-            }
-            self.db_manager.store_song(item, [])
-            return "Song fingerprint added successfully!"
-        except ClientError as e:
-            return f"Failed to add fingerprint: {e.response['Error']['Message']}"
-
-    def get_fingerprint(self, song_id):
-        try:
-            result = self.db_manager.fetch_item({"SongID": song_id})
-            if result:
-                return result
-            else:
-                return "No record found for the given SongID."
-        except ClientError as e:
-            return f"Failed to retrieve fingerprint: {e.response['Error']['Message']}"
+        self.db_manager = ADC(aws_access_key_id, aws_secret_access_key, region_name, table_name)
+        self.bucket_name = bucket_name
+        self.s3_manager = S3Manager(aws_access_key_id, aws_secret_access_key, region_name, bucket_name)
 
     def list_all_records(self):
         try:
-            response = self.db_manager.db.dynamodb_resource.Table(self.table_name).scan()
+            response = self.db_manager.dynamodb_resource.Table(self.db_manager.table_name).scan()
             return response.get("Items", [])
         except ClientError as e:
             print(f"Failed to list records: {e.response['Error']['Message']}")
@@ -49,7 +24,7 @@ class StreamlitApp:
             for hash_item in hashes:
                 result = self.db_manager.find_song_by_hashes([hash_item])
                 if result:
-                    return result
+                    return result  # Return the entire item
             return None
         except ClientError as e:
             st.error(f"Failed to compare song: {e.response['Error']['Message']}")
@@ -68,7 +43,8 @@ class StreamlitApp:
                     "album": "Unknown Album"
                 }
                 song_id = self.db_manager.get_latest_song_id() + 1
-                fingerprints = generate_hashes(uploaded_file, song_id, song_data["artist"], song_data["title"], song_data["album"])
+                fingerprints = generate_hashes(uploaded_file, song_id, song_data["artist"], song_data["title"],
+                                               song_data["album"])
 
                 if fingerprints:  # Proceed only if fingerprint generation was successful
                     # Store fingerprints and metadata in DynamoDB
@@ -110,7 +86,7 @@ class StreamlitApp:
                 match = self.compare_song(compare_hashes)
                 if match:
                     st.success("Match found in the database!")
-                    st.json(match)
+                    st.write(match)  # Display the entire item including metadata
                 else:
                     st.warning("No match found in the database.")
             except Exception as e:
@@ -125,7 +101,7 @@ class StreamlitApp:
                 match = self.compare_song(compare_hashes)
                 if match:
                     st.success("Match found in the database!")
-                    st.json(match)
+                    st.write(match)  # Display the entire item including metadata
                 else:
                     st.warning("No match found in the database.")
             except Exception as e:
