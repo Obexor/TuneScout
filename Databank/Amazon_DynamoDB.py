@@ -2,7 +2,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 class AmazonDBConnectivity:
-    def __init__(self, aws_access_key_id, aws_secret_access_key, region_name):
+    def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name):
         self.dynamodb_client = boto3.client(
             'dynamodb',
             aws_access_key_id=aws_access_key_id,
@@ -15,6 +15,8 @@ class AmazonDBConnectivity:
             aws_secret_access_key=aws_secret_access_key,
             region_name=region_name
         )
+        self.table_name = table_name
+        self.current_song_id = 0
 
     def test_connectivity(self):
         try:
@@ -23,31 +25,27 @@ class AmazonDBConnectivity:
         except (BotoCoreError, ClientError) as e:
             print("Connection failed:", e)
 
-    def insert_item(self, table_name, item):
+    def insert_item(self, item):
         try:
-            table = self.dynamodb_resource.Table(table_name)
+            table = self.dynamodb_resource.Table(self.table_name)
             table.put_item(Item=item)
             print("Data inserted successfully.")
         except (BotoCoreError, ClientError) as e:
             print("Failed to insert data:", e)
 
-    def fetch_item(self, table_name, key):
+    def fetch_item(self):
         try:
-            table = self.dynamodb_resource.Table(table_name)
-            response = table.get_item(Key=key)
-            if "Item" in response:
-                print("Retrieved data:", response["Item"])
-                return response["Item"]
-            else:
-                print("No data found for the given key.")
-                return None
+            table = self.dynamodb_resource.Table(self.table_name)
+            response = table.scan()
+            items = response.get("Items", [])
+            return items
         except (BotoCoreError, ClientError) as e:
             print("Failed to fetch data:", e)
-            return None
+            return []
 
-    def update_item(self, table_name, key, update_expression, expression_attribute_names, expression_attribute_values):
+    def update_item(self, key, update_expression, expression_attribute_names, expression_attribute_values):
         try:
-            table = self.dynamodb_resource.Table(table_name)
+            table = self.dynamodb_resource.Table(self.table_name)
             table.update_item(
                 Key=key,
                 UpdateExpression=update_expression,
@@ -59,10 +57,77 @@ class AmazonDBConnectivity:
         except (BotoCoreError, ClientError) as e:
             print("Failed to update data:", e)
 
-    def delete_item(self, table_name, key):
+    def delete_item(self, key):
         try:
-            table = self.dynamodb_resource.Table(table_name)
+            table = self.dynamodb_resource.Table(self.table_name)
             table.delete_item(Key=key)
             print("Data deleted successfully.")
         except (BotoCoreError, ClientError) as e:
             print("Failed to delete data:", e)
+
+    def store_song(self, song_data, hashes):
+        try:
+            if self.song_exists(hashes):
+                return False
+
+            self.current_song_id = self.get_latest_song_id() + 1
+            song_data["SongID"] = str(self.current_song_id)
+
+            self.insert_item(song_data)
+
+            for hash_item in hashes:
+                hash_item["SongID"] = song_data["SongID"]
+                self.insert_item(hash_item)
+
+            return True
+        except ClientError as e:
+            print(f"Failed to store song: {e.response['Error']['Message']}")
+            return False
+
+    def get_latest_song_id(self):
+        try:
+            response = self.dynamodb_resource.Table(self.table_name).scan()
+            items = response.get("Items", [])
+            if not items:
+                return 0
+            max_song_id = max(int(item["SongID"]) for item in items)
+            return max_song_id
+        except ClientError as e:
+            print(f"Failed to get latest song ID: {e.response['Error']['Message']}")
+            return 0
+
+    def song_exists(self, hashes):
+        try:
+            for hash_item in hashes:
+                if "Hash" not in hash_item:
+                    print("Hash key missing in hash_item")
+                    continue
+                result = self.find_song_by_hashes([hash_item])
+                if result:
+                    return True
+            return False
+        except ClientError as e:
+            print(f"Failed to check if song exists: {e.response['Error']['Message']}")
+            return False
+
+    def store_hashes(self, hashes):
+        try:
+            for hash_item in hashes:
+                self.insert_item(hash_item)
+        except ClientError as e:
+            print(f"Failed to store hashes: {e.response['Error']['Message']}")
+
+    def find_song_by_hashes(self, hashes):
+        try:
+            for hash_item in hashes:
+                result = self.fetch_item()
+                if result:
+                    for item in result:
+                        if item.get("Hash") == hash_item.get("Hash"):
+                            # Remove 'offset' and 'Hash' from the item
+                            filtered_item = {k: v for k, v in item.items() if k not in ["Offset", "Hash"]}
+                            return filtered_item
+            return None
+        except ClientError as e:
+            print(f"Failed to find song by hashes: {e.response['Error']['Message']}")
+            return None
