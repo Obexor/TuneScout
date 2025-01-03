@@ -125,7 +125,7 @@ class AmazonDBConnectivity:
                     for item in result:
                         if item.get("Hash") == hash_item.get("Hash"):
                             # Remove 'offset' and 'Hash' from the item
-                            filtered_item = {k: v for k, v in item.items() if k not in ["Offset", "Hash"]}
+                            filtered_item = {k: v for k, v in item.items() if k not in ["s3_key", "Hash"]}
                             return filtered_item
             return None
         except ClientError as e:

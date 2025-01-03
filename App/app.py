@@ -93,7 +93,7 @@ class StreamlitApp:
             if st.button("Compare"):
                 try:
                     song_id = self.db_manager.get_latest_song_id() + 1
-                    compare_hashes = generate_hashes(compare_file, song_id, "", "", "")
+                    compare_hashes = generate_hashes(compare_file, song_id, "", "", "", "")
                     match = self.db_manager.find_song_by_hashes(compare_hashes)
                     if match:
                         st.success("Match found!")
