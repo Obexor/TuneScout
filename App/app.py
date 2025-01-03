@@ -1,9 +1,9 @@
+import streamlit as st
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
-from botocore.exceptions import ClientError
+from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
-from Databank.Amazon_S3 import S3Manager
-import streamlit as st
+
 
 class StreamlitApp:
     def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name):
@@ -11,98 +11,159 @@ class StreamlitApp:
         self.bucket_name = bucket_name
         self.s3_manager = S3Manager(aws_access_key_id, aws_secret_access_key, region_name, bucket_name)
 
-    def list_all_records(self):
-        try:
-            response = self.db_manager.dynamodb_resource.Table(self.db_manager.table_name).scan()
-            return response.get("Items", [])
-        except ClientError as e:
-            print(f"Failed to list records: {e.response['Error']['Message']}")
-            return []
+    def upload_song_with_metadata(self):
+        st.header("Upload Song with Metadata")
 
-    def compare_song(self, hashes):
-        try:
-            for hash_item in hashes:
-                result = self.db_manager.find_song_by_hashes([hash_item])
-                if result:
-                    return result  # Return the entire item
-            return None
-        except ClientError as e:
-            st.error(f"Failed to compare song: {e.response['Error']['Message']}")
-            return None
+        # Step 1: Upload File
+        uploaded_file = st.file_uploader("Upload a song (MP3/WAV)", type=["mp3", "wav"])
+
+        # Step 2: Metadata Input
+        artist = st.text_input("Artist", "Unknown")  # Default value as "Unknown"
+        title = st.text_input("Title", "Unknown Title")
+        album = st.text_input("Album", "Unknown Album")
+
+        # Confirm upload
+        if st.button("Upload Song"):
+            if not uploaded_file:
+                st.error("Please upload a valid MP3 or WAV file.")
+                return
+
+            try:
+                # Step 3: Assign Metadata
+                song_data = {
+                    "artist": artist.strip() or "Unknown",
+                    "title": title.strip() or "Unknown Title",
+                    "album": album.strip() or "Unknown Album"
+                }
+                st.info(
+                    f"Processing: Title='{song_data['title']}', Artist='{song_data['artist']}', Album='{song_data['album']}'")
+
+                # Step 4: Generate Song ID
+                song_id = self.db_manager.get_latest_song_id() + 1
+
+                # Step 5: Generate Fingerprints
+                st.info("Generating fingerprints for the song...")
+                fingerprints = generate_hashes(
+                    uploaded_file,  # Input file
+                    song_id,
+                    song_data["artist"],
+                    song_data["title"],
+                    song_data["album"]
+                )
+
+                if not fingerprints:
+                    st.error("Fingerprint generation failed. Cannot proceed with uploading.")
+                    return
+
+                # Step 6: Check for Existing Song
+                st.info("Checking if the song already exists in the database...")
+                existing_match = self.db_manager.find_song_by_hashes(fingerprints)
+
+                if existing_match:
+                    st.warning(f"The song already exists in the database.")
+                    st.json(existing_match)  # Display metadata or match information
+                    return
+
+                # Step 7: Store Metadata and Fingerprints in DynamoDB
+                st.info("Storing song metadata and fingerprints in the database...")
+                stored = self.db_manager.store_song(song_data, fingerprints)
+
+                if not stored:
+                    st.error("Failed to store the song data in the database. Please try again.")
+                    return
+
+                # Step 8: Upload Song File to S3
+                st.info("Uploading the song file to S3...")
+                self.s3_manager.upload_file(
+                    uploaded_file.name,
+                    f"songs/{uploaded_file.name}"  # Place files in the 'songs/' folder in S3
+                )
+
+                st.success(f"Successfully uploaded '{song_data['title']}' by '{song_data['artist']}'!")
+
+            except Exception as e:
+                st.error(f"Error occurred during upload: {str(e)}")
+
+    def compare_uploaded_song(self):
+        st.header("Compare Uploaded Song")
+        compare_file = st.file_uploader("Upload a song to compare", type=["mp3", "wav"])
+        if compare_file:
+            if st.button("Compare"):
+                try:
+                    song_id = self.db_manager.get_latest_song_id() + 1
+                    compare_hashes = generate_hashes(compare_file, song_id, "", "", "")
+                    match = self.db_manager.find_song_by_hashes(compare_hashes)
+                    if match:
+                        st.success("Match found!")
+                        st.json(match)  # Display matched metadata
+                    else:
+                        st.warning("No match found.")
+                except Exception as e:
+                    st.error(f"Error comparing song: {e}")
+
+    def compare_recorded_song(self):
+        st.header("Compare Recorded Song")
+        if st.button("Record and Compare"):
+            try:
+                record_audio("recorded_compare.wav", duration=5)
+                with open("recorded_compare.wav", "rb") as recorded_file:
+                    compare_hashes = generate_hashes(recorded_file, self.db_manager.get_latest_song_id() + 1, "", "",
+                                                     "")
+                    match = self.db_manager.find_song_by_hashes(compare_hashes)
+                    if match:
+                        st.success("Match found!")
+                        st.json(match)  # Display matched metadata
+                    else:
+                        st.warning("No match found.")
+            except Exception as e:
+                st.error(f"Error recording and comparing audio: {e}")
+
+    def stream_uploaded_song(self):
+        st.header("Stream Uploaded Songs")
+
+        # Fetch songs from DynamoDB when the button is clicked
+        if st.button("List Songs"):
+            try:
+                # Use self.db_manager to call the list_all_records method
+                songs = self.db_manager.list_all_records()
+
+                if songs:
+                    st.info("Songs found in the database:")
+                    for index, song in enumerate(songs):
+                        title = song.get('title', 'Unknown Title')
+                        artist = song.get('artist', 'Unknown Artist')
+
+                        # Display the song metadata
+                        st.write(f"Title: {title}, Artist: {artist}")
+
+                        # Add a button to stream each song
+                        if st.button(f"Stream {title}",
+                                     key=f"stream-{title}-{index}"):  # Add index to ensure uniqueness
+                            # Generate pre-signed URL for the song on S3
+                            s3_key = f"songs/{title}.mp3"  # Make sure the key matches your S3 structure
+                            song_uri = self.s3_manager.get_presigned_url(s3_key)  # Get pre-signed URL
+
+                            if song_uri:
+                                st.audio(song_uri)  # Use Streamlit's audio player to play the song
+                            else:
+                                st.error(f"Failed to stream the song: {title}")
+                else:
+                    st.warning("No songs found in the database.")
+            except Exception as e:
+                st.error(f"Error streaming songs: {e}")
 
     def run(self):
-        st.title("Song Recognition Pipeline")
+        st.title("Song Recognition and Streaming App")
+        st.sidebar.title("Navigation")
+        app_mode = st.sidebar.radio("Choose a function",
+                                    ["Upload Song", "Compare Uploaded Song",
+                                     "Compare Recorded Song", "Stream Songs"])
 
-        st.header("Upload a Song")
-        uploaded_file = st.file_uploader("Upload a song", type=["mp3", "wav"])
-        if uploaded_file:
-            try:
-                song_data = {
-                    "artist": "Unknown",
-                    "title": "Uploaded Song",
-                    "album": "Unknown Album"
-                }
-                song_id = self.db_manager.get_latest_song_id() + 1
-                fingerprints = generate_hashes(uploaded_file, song_id, song_data["artist"], song_data["title"],
-                                               song_data["album"])
-
-                if fingerprints:  # Proceed only if fingerprint generation was successful
-                    # Store fingerprints and metadata in DynamoDB
-                    if self.db_manager.store_song(song_data, fingerprints):
-                        st.success("Song stored in the database.")
-                        self.s3_manager.upload_file(uploaded_file.name, f"songs/{uploaded_file.name}")
-                        st.success("Song uploaded to S3.")
-                    else:
-                        st.warning("Song already exists.")
-                else:
-                    st.error("Failed to generate fingerprints.")
-            except Exception as e:
-                st.error(f"Failed to process uploaded song: {e}")
-
-        st.header("All Songs and Fingerprints")
-        if st.button("List All Songs"):
-            try:
-                records = self.list_all_records()
-                if records:
-                    st.write(records)
-                else:
-                    st.warning("No records found.")
-            except Exception as e:
-                st.error(f"Failed to fetch records: {e}")
-
-        st.header("All Records in the Table")
-        if st.button("List All Records"):
-            try:
-                records = self.list_all_records()
-                st.write(records)
-            except Exception as e:
-                st.error(f"Failed to list records: {e}")
-
-        st.header("Compare Uploaded Song")
-        uploaded_compare_file = st.file_uploader("Upload a song to compare", type=["mp3", "wav"])
-        if uploaded_compare_file:
-            try:
-                compare_hashes = generate_hashes(uploaded_compare_file, self.db_manager.current_song_id + 1, "", "", "")
-                match = self.compare_song(compare_hashes)
-                if match:
-                    st.success("Match found in the database!")
-                    st.write(match)  # Display the entire item including metadata
-                else:
-                    st.warning("No match found in the database.")
-            except Exception as e:
-                st.error(f"Failed to compare uploaded song: {e}")
-
-        st.header("Compare Recorded Song")
-        if st.button("Record and Compare Audio"):
-            try:
-                record_audio("recorded_compare.wav", 5)
-                with open("recorded_compare.wav", "rb") as recorded_file:
-                    compare_hashes = generate_hashes(recorded_file, self.db_manager.current_song_id + 1, "", "", "")
-                match = self.compare_song(compare_hashes)
-                if match:
-                    st.success("Match found in the database!")
-                    st.write(match)  # Display the entire item including metadata
-                else:
-                    st.warning("No match found in the database.")
-            except Exception as e:
-                st.error(f"Failed to record and compare audio: {e}")
+        if app_mode == "Upload Song":
+            self.upload_song_with_metadata()
+        elif app_mode == "Compare Uploaded Song":
+            self.compare_uploaded_song()
+        elif app_mode == "Compare Recorded Song":
+            self.compare_recorded_song()
+        elif app_mode == "Stream Songs":
+            self.stream_uploaded_song()

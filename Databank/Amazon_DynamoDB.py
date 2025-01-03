@@ -131,3 +131,11 @@ class AmazonDBConnectivity:
         except ClientError as e:
             print(f"Failed to find song by hashes: {e.response['Error']['Message']}")
             return None
+
+    def list_all_records(self):
+        try:
+            response = self.dynamodb_resource.Table(self.table_name).scan()
+            return response.get("Items", [])
+        except Exception as e:
+            print(f"Failed to retrieve records: {str(e)}")
+            return []

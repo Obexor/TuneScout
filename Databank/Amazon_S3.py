@@ -35,3 +35,21 @@ class S3Manager:
             print(f"Failed to download file: {e.response['Error']['Message']}")
         except Exception as e:
             print(f"An error occurred: {e}")
+
+    def get_presigned_url(self, key, expiration=3600):
+        """
+        Generate a pre-signed URL for accessing the object.
+        :param key: The key of the object in the S3 bucket (e.g., "songs/song.mp3").
+        :param expiration: The time in seconds for which the URL remains valid.
+        :return: Pre-signed URL string or None if there is an error.
+        """
+        try:
+            url = self.s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': self.bucket_name, 'Key': key},
+                ExpiresIn=expiration
+            )
+            return url
+        except Exception as e:
+            print(f"Failed to generate pre-signed URL: {str(e)}")
+            return None
