@@ -78,7 +78,6 @@ class StreamlitApp:
                 if not fingerprints:
                     st.error("Fingerprint generation failed. Cannot proceed with uploading.")
                     return
-
                 # Step 6: Check for Existing Song
                 st.info("Checking if the song already exists in the database...")
                 existing_match = self.db_manager.find_song_by_hashes(fingerprints)
