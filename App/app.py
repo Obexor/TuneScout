@@ -2,12 +2,14 @@ import streamlit as st
 import wave
 import numpy as np
 import os
+import pyaudio
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
 from equalizer.filters import butter_lowpass_filter, butter_highpass_filter, equalizer
 from equalizer.visualization import plot_signal, plot_spectrum
+from pydub import AudioSegment
 
 
 class StreamlitApp:
@@ -218,12 +220,19 @@ class StreamlitApp:
         st.header("Audio Equalizer & Filters")
 
         # Lade Audiodatei hoch
-        uploaded_file = st.file_uploader("Upload an audio file", type=["wav"])
+        uploaded_file = st.file_uploader("Upload an audio file", type=["mp3", "wav"])
         if uploaded_file:
             try:
-                with wave.open(uploaded_file, 'rb') as wf:
-                    audio_data = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
-                    fs = wf.getframerate()
+                if uploaded_file.type == "audio/mpeg":
+                    audio = AudioSegment.from_mp3(uploaded_file)
+                elif uploaded_file.type == "audio/wav":
+                    audio = AudioSegment.from_wav(uploaded_file)
+                else:
+                    st.error("Unsupported file type")
+                    return
+
+                audio_data = np.array(audio.get_array_of_samples())
+                fs = audio.frame_rate
             except Exception as e:
                 st.error(f"Error processing the audio file: {e}")
                 return
@@ -243,15 +252,14 @@ class StreamlitApp:
                     (200, 2000): st.slider("Mid (200-2000 Hz)", 0.5, 2.0, 1.0),
                     (2000, 20000): st.slider("Treble (2000-20000 Hz)", 0.5, 2.0, 1.0),
                 }
+                # Apply equalizer
                 filtered_data = equalizer(audio_data, fs, gain_bands)
 
-            # Visualisierung
-            st.subheader("Original Signal")
-            plot_signal(audio_data, fs, "Original Signal")
-            plot_spectrum(audio_data, fs, "Original Spectrum")
+            # Plot the original and filtered signals
+            plot_signal(audio_data, fs, title="Original Signal")
+            plot_signal(filtered_data, fs, title="Filtered Signal")
+            plot_spectrum(audio_data, fs, title="Original Spectrum")
+            plot_spectrum(filtered_data, fs, title="Filtered Spectrum")
 
-            st.subheader("Filtered Signal")
-            plot_signal(filtered_data, fs, "Filtered Signal")
-            plot_spectrum(filtered_data, fs, "Filtered Spectrum")
         else:
                 st.warning("Please upload an audio file to use the equalizer features.")
