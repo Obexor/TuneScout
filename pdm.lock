@@ -5,7 +5,7 @@
 groups = ["default"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:acdc256b8090d95e6243336f9bb23f89d04429e3140c98059f9afa33e1bdebe9"
+content_hash = "sha256:c8c04aa9ce27b8ee21b2682b86975d211cec6597c6f1b57ed67bf32fb1ace07c"
 
 [[metadata.targets]]
 requires_python = "==3.13.*"
@@ -620,6 +620,16 @@ dependencies = [
 files = [
     {file = "pydeck-0.9.1-py2.py3-none-any.whl", hash = "sha256:b3f75ba0d273fc917094fa61224f3f6076ca8752b93d46faf3bcfd9f9d59b038"},
     {file = "pydeck-0.9.1.tar.gz", hash = "sha256:f74475ae637951d63f2ee58326757f8d4f9cd9f2a457cf42950715003e2cb605"},
+]
+
+[[package]]
+name = "pydub"
+version = "0.25.1"
+summary = "Manipulate audio with an simple and easy high level interface"
+groups = ["default"]
+files = [
+    {file = "pydub-0.25.1-py2.py3-none-any.whl", hash = "sha256:65617e33033874b59d87db603aa1ed450633288aefead953b30bded59cb599a6"},
+    {file = "pydub-0.25.1.tar.gz", hash = "sha256:980a33ce9949cab2a569606b65674d748ecbca4f0796887fd6f46173a7b0d30f"},
 ]
 
 [[package]]

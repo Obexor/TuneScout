@@ -15,6 +15,7 @@ dependencies = [
     "boto3>=1.35.86",
     "scipy>=1.15.0",
     "matplotlib>=3.10.0",
+    "pydub>=0.25.1",
 ]
 requires-python = "==3.13.*"
 readme = "README.md"
