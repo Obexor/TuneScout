@@ -1,6 +1,7 @@
 import streamlit as st
 import wave
 import numpy as np
+import os
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
@@ -33,7 +34,7 @@ class StreamlitApp:
     def upload_song_with_metadata(self):
         st.header("Upload Song with Metadata")
 
-        # Step 1: Upload File
+        # Step 1: Upload File and get filetype
         uploaded_file = st.file_uploader("Upload a song (MP3/WAV)", type=["mp3", "wav"])
 
         # Step 2: Metadata Input
@@ -63,13 +64,15 @@ class StreamlitApp:
 
                 # Step 5: Generate Fingerprints
                 st.info("Generating fingerprints for the song...")
+                file_type = os.path.splitext(uploaded_file.name)[1][1:]
                 fingerprints = generate_hashes(
                     uploaded_file,  # Input file
-                    song_id,
-                    song_data["artist"],
-                    song_data["title"],
-                    song_data["album"],
-                    song_data["s3_key"]
+                    file_type,
+                    song_id,  # Song ID
+                    song_data['artist'],  # Artist
+                    song_data['title'],  # Title
+                    song_data['album'], # Album
+                    song_data['s3_key']  # S3-Key
                 )
 
                 if not fingerprints:
