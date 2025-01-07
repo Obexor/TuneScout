@@ -1,31 +1,27 @@
 import hashlib
 import wave
-import numpy as np
-from pydub import AudioSegment
-import io
 
-def generate_hashes(audio_file, song_id, artist, title, album, s3_key):
+
+def generate_hashes(audio_file, file_format):
     try:
-        # Load the audio file using pydub
-        audio = AudioSegment.from_file(audio_file)
-        
-        # Convert audio to raw data
-        audio_samples = np.array(audio.get_array_of_samples())
+        # Process WAV files
+        if file_format == 'wav':
+            with wave.open(audio_file, 'rb') as wav_file:
+                # Read all frame data from the WAV file
+                frames = wav_file.readframes(wav_file.getnframes())
+                fingerprint = hashlib.sha256(frames).hexdigest()
 
-        # Generate a unique fingerprint using SHA-256
-        fingerprint = hashlib.sha256(audio_samples.tobytes()).hexdigest()
+        # Process MP3 files
+        elif file_format == 'mp3':
+            # Read raw byte data directly from the MP3 file
+            with open(audio_file, 'rb') as f:
+                raw_data = f.read()
+                fingerprint = hashlib.sha256(raw_data).hexdigest()
 
-        # Return fingerprint and metadata
-        return [
-            {
-                "Hash": fingerprint,
-                "s3_key": s3_key,
-                "SongID": song_id,
-                "Artist": artist,
-                "Title": title,
-                "Album": album,
-            }
-        ]
+        else:
+            raise ValueError("Unsupported file format. Use 'wav' or 'mp3'.")
+
+        return fingerprint
     except Exception as e:
-        print(f"Error processing audio file: {e}")
-        return []
+        print(f"Error generating fingerprint: {e}")
+        return None
