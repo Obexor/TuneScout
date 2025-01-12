@@ -50,17 +50,13 @@ class S3Manager:
             print(f"An error occurred: {e}")
             return None
 
-    def get_presigned_url(self, s3_key):
+    def get_presigned_url(self, s3_key, expiry=3600):
         try:
-            # Generate the URL for the object
-            response = self.s3.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': self.bucket_name, 'Key': s3_key},
-            )
+            response = self.s3_client.generate_presigned_url('get_object', Params={
+                'Bucket': self.bucket_name,
+                'Key': s3_key
+            }, ExpiresIn=expiry)
             return response
-        except ClientError as e:
-            print(f"Failed to generate presigned URL: {e.response['Error']['Message']}")
-            return None
         except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+            print(f"Error generating presigned URL: {e}")  # Log error
             return None
