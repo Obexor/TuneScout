@@ -1,12 +1,14 @@
 from App.app import StreamlitApp
-# AWS credentials and DynamoDB table name
-aws_access_key_id = 'AKIA5CBDRHXJNKCGQ4WJ'
-aws_secret_access_key = '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'
-aws_region = 'eu-north-1'
-table_name = 'SongsFingerprints'
-bucket_name = 'song-storage-bucket'
+from dynaconf import settings
 
+# Load the configuration settings
+aws_access_key = settings.AWS_ACCESS_KEY_ID
+aws_secret_key = settings.AWS_SECRET_ACCESS_KEY
+aws_region = settings.AWS_REGION
+table_name = settings.AWS_TABLE_NAME
+bucket_name = settings.AWS_BUCKET_NAME
 
 # Initialize and run the Streamlit app
-app = StreamlitApp(aws_access_key_id, aws_secret_access_key, aws_region, table_name, bucket_name)
+app = StreamlitApp(aws_access_key, aws_secret_key, aws_region, table_name, bucket_name)
 app.run()
+
