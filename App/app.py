@@ -2,14 +2,13 @@ import streamlit as st
 import wave
 import numpy as np
 import os
-import pyaudio
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
 from equalizer.filters import butter_lowpass_filter, butter_highpass_filter, equalizer
 from equalizer.visualization import plot_signal, plot_spectrum
-from pydub import AudioSegment
+
 
 
 class StreamlitApp:
@@ -224,15 +223,22 @@ class StreamlitApp:
         if uploaded_file:
             try:
                 if uploaded_file.type == "audio/mpeg":
-                    audio = AudioSegment.from_mp3(uploaded_file)
+                    temp_file = "temp_audio.mp3"
                 elif uploaded_file.type == "audio/wav":
-                    audio = AudioSegment.from_wav(uploaded_file)
+                    temp_file = "temp_audio.wav"
                 else:
                     st.error("Unsupported file type")
                     return
 
-                audio_data = np.array(audio.get_array_of_samples())
-                fs = audio.frame_rate
+                with open(temp_file, "wb") as temp_audio_file:
+                    temp_audio_file.write(uploaded_file.getbuffer())
+
+                with wave.open(temp_file, "rb") as audio:
+                    fs = audio.getframerate()
+                    n_frames = audio.getnframes()
+                    audio_data = np.frombuffer(audio.readframes(n_frames), dtype=np.int16)
+
+                os.remove(temp_file)
             except Exception as e:
                 st.error(f"Error processing the audio file: {e}")
                 return
