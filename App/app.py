@@ -1,15 +1,13 @@
 import streamlit as st
-import wave
 import numpy as np
 import os
-import wave
 import soundfile as sf
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
 from equalizer.filters import butter_lowpass_filter, butter_highpass_filter, equalizer
-from equalizer.visualization import plot_signal, plot_spectrum
+import matplotlib.pyplot as plt
 
 
 
@@ -160,44 +158,51 @@ class StreamlitApp:
     def stream_uploaded_song(self):
         st.header("Stream Uploaded Songs")
 
-        # Fetch songs from DynamoDB when the button is clicked
-        if st.button("List Songs"):
-            try:
-                # Use self.db_manager to call the list_all_records method
-                songs = self.db_manager.fetch_item()
+        # Fetch songs from the database
+        try:
+            # Fetch songs dynamically (can be cached for improved performance)
+            songs = self.db_manager.fetch_item()
 
-                if songs:
-                    st.info("Songs found in the database:")
+            if songs:
+                st.info("Songs found in the database:")
 
-                    for index, song in enumerate(songs):
-                        # Fetch and display full metadata
-                        title = song.get('Title', 'Unknown Title')
-                        artist = song.get('Artist', 'Unknown Artist')
-                        album = song.get('Album', 'Unknown Album')
-                        s3_key = song.get('s3_key')
+                # Display a list of songs with streaming buttons
+                for index, song in enumerate(songs):
+                    title = song.get('Title', 'Unknown Title')
+                    artist = song.get('Artist', 'Unknown Artist')
+                    album = song.get('Album', 'Unknown Album')
+                    s3_key = song.get('s3_key')  # Fetch the S3 object key for this song
 
-                        # Warn if required fields are missing
-                        if not s3_key:
-                            st.warning(f"Missing S3 key for song '{title}' at index {index}")
-                            continue
+                    # Ensure the s3_key exists
+                    if not s3_key:
+                        st.warning(f"Missing S3 key for song: {title}")
+                        continue  # Skip this song since it can't be streamed
 
-                        # Display song metadata in a structured way
-                        st.subheader(f"Song {index + 1}")
-                        st.write(f"**Title**: {title}")
-                        st.write(f"**Artist**: {artist}")
-                        st.write(f"**Album**: {album}")
+                    # Display song details
+                    st.subheader(f"Song {index + 1}")
+                    st.write(f"**Title**: {title}")
+                    st.write(f"**Artist**: {artist}")
+                    st.write(f"**Album**: {album}")
 
-                        # Add a button for streaming
-                        if st.button(f"Stream {title}", key=f"stream-{index}"):
-                            song_uri = self.s3_manager.get_presigned_url(s3_key)
-                            if song_uri:
-                                st.audio(song_uri)
-                            else:
-                                st.error(f"Failed to stream the song: {title}")
-                else:
-                    st.warning("No songs found in the database.")
-            except Exception as e:
-                st.error(f"Error streaming songs: {e}")
+                    # Button to stream the song
+                    if st.button(f"Stream {title}", key=f"stream-{index}"):
+                        with st.spinner("Fetching the song..."):  # Show a spinner while streaming is initialized
+                            try:
+                                # Generate the pre-signed URL for streaming from S3
+                                song_uri = self.s3_manager.get_presigned_url(s3_key)
+                                if not song_uri:
+                                    st.error(f"Failed to generate a streaming URL for '{title}'.")
+                                else:
+                                    # Stream the audio using the Streamlit audio player
+                                    st.audio(song_uri, format="audio/mp3")  # Use the URI to play the audio
+                            except Exception as e:
+                                st.error(f"Error while streaming '{title}': {e}")
+            else:
+                st.warning("No songs available in the database.")
+
+        except Exception as e:
+            # Provide a meaningful error message if song fetching fails
+            st.error(f"Error fetching songs: {e}")
 
     def run(self):
         st.title("Song Recognition and Streaming App")
@@ -218,79 +223,80 @@ class StreamlitApp:
         elif app_mode == "Equalizer":
             self.equalizer_features()
 
-
     def equalizer_features(self):
         st.header("Equalizer")
-        st.write("This feature allows you to modify and equalize uploaded WAV files in real-time.")
+        st.write("This feature allows you to modify and equalize uploaded or streamed WAV/MP3 files in real-time.")
 
-        from matplotlib.figure import Figure
-        import matplotlib.pyplot as plt
+        # Option to select between uploading a file or streaming from AWS S3
+        input_mode = st.radio(
+            "Choose Source",
+            options=["Upload a File", "Stream from AWS S3"],
+            index=0
+        )
 
-        # Step 1: File Upload
+        uploaded_file = None
         uploaded_file = st.file_uploader("Upload a WAV or MP3 file", type=["wav", "mp3"])
-
-        # Step 2: Adjust Equalizer
+        # If a file is either uploaded or streamed, proceed with processing
         if uploaded_file:
             st.subheader("Equalizer Settings")
-            bass_gain = st.slider("Bass Gain (dB)", -10, 10, 1)
-            midrange_gain = st.slider("Midrange Gain (dB)", -10, 10, 1)
-            treble_gain = st.slider("Treble Gain (dB)", -10, 10, 1)
+            bass_gain = st.slider("Bass Gain (dB)", -10, 10, 0)
+            midrange_gain = st.slider("Midrange Gain (dB)", -10, 10, 0)
+            treble_gain = st.slider("Treble Gain (dB)", -10, 10, 0)
 
-            # Step 3: Process WAV file
-            import tempfile
-            file_type = uploaded_file.name.split(".")[-1].lower()
+            # Process the file
+            try:
+                import tempfile
+                import wave
 
-            if file_type == "wav":
-                with wave.open(uploaded_file, "rb") as wav_file:
-                    params = wav_file.getparams()
-                    n_channels, sample_width, frame_rate, n_frames, _, _ = params
-                    raw_data = wav_file.readframes(n_frames)
-            elif file_type == "mp3":
-                data, samplerate = sf.read(uploaded_file)
-                n_channels = data.shape[1] if len(data.shape) > 1 else 1
-                sample_width = 2  # Assuming 16-bit PCM
-                frame_rate = samplerate
-                n_frames = len(data)
-                raw_data = (data * (2**15 - 1)).astype(np.int16).tobytes()
+                # Handle WAV and MP3 files
+                file_type = uploaded_file.name.split(".")[-1].lower()
 
-            st.info("Processing the WAV file...")
-            audio_signal = np.frombuffer(raw_data, dtype=np.int16)
-            time = np.linspace(0, len(audio_signal) / frame_rate, num=len(audio_signal))
+                if file_type == "wav":
+                    with wave.open(uploaded_file, "rb") as wav_file:
+                        params = wav_file.getparams()
+                        raw_data = wav_file.readframes(params.nframes)
+                        frame_rate = params.framerate
+                elif file_type == "mp3":
+                    data, frame_rate = sf.read(uploaded_file)
+                    raw_data = (data * (2 ** 15 - 1)).astype(np.int16).tobytes()
+                else:
+                    st.error("Unsupported file type. Please upload a WAV or MP3 file.")
+                    return
 
-            # Apply filters using the custom equalizer module
-            bass = butter_lowpass_filter(audio_signal, cutoff=200, fs=frame_rate, gain=bass_gain)
-            midrange = equalizer(audio_signal, freq_range=(200, 3000), fs=frame_rate, gain=midrange_gain)
-            treble = butter_highpass_filter(audio_signal, cutoff=3000, fs=frame_rate, gain=treble_gain)
-            equalized_signal = bass + midrange + treble
+                audio_signal = np.frombuffer(raw_data, dtype=np.int16)
+                time = np.linspace(0, len(audio_signal) / frame_rate, len(audio_signal))
 
-            # Step 4: Visualization
-            st.subheader("Equalized Signal Visualization")
-            fig = Figure(figsize=(10, 4))
-            ax = fig.add_subplot(1, 1, 1)
-            ax.plot(time, equalized_signal, label="Equalized Signal")
-            ax.set_xlabel("Time (s)")
-            ax.set_ylabel("Amplitude")
-            ax.legend()
-            st.pyplot(fig)
+                # Apply filters to adjust bass, midrange, and treble frequencies
+                bass = butter_lowpass_filter(audio_signal, cutoff=200, fs=frame_rate, gain=bass_gain)
+                midrange = equalizer(audio_signal, freq_range=(200, 3000), fs=frame_rate, gain=midrange_gain)
+                treble = butter_highpass_filter(audio_signal, cutoff=3000, fs=frame_rate, gain=treble_gain)
+                equalized_signal = bass + midrange + treble
 
-            # Write to temporary WAV file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-                with wave.open(temp_file.name, "wb") as out_wav:
-                    out_wav.setnchannels(n_channels)
-                    out_wav.setsampwidth(sample_width)
-                    out_wav.setframerate(frame_rate)
-                    equalized_signal = np.clip(equalized_signal, -32768, 32767).astype(np.int16)
-                    out_wav.writeframes(equalized_signal.tobytes())
-                temp_file_path = temp_file.name
+                # Visualization
+                st.subheader("Equalized Signal Visualization")
+                fig, ax = plt.subplots(figsize=(10, 4))
+                ax.plot(time, equalized_signal, label="Equalized Signal")
+                ax.set_xlabel("Time (s)")
+                ax.set_ylabel("Amplitude")
+                ax.legend()
+                st.pyplot(fig)
 
-        # Step 5: Play and Download Equalized WAV
-            st.audio(temp_file_path, format="audio/wav")
-            st.download_button(
-                label="Download Equalized WAV",
-                data=open(temp_file_path, "rb").read(),
-                file_name="equalized.wav",
-                mime="audio/wav"
-            )
+                # Save the equalized audio as a WAV file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+                    with wave.open(temp_file.name, "wb") as out_wav:
+                        out_wav.setnchannels(1)  # Mono
+                        out_wav.setsampwidth(2)  # 16-bit depth
+                        out_wav.setframerate(frame_rate)
+                        equalized_signal = np.clip(equalized_signal, -32768, 32767).astype(np.int16)
+                        out_wav.writeframes(equalized_signal.tobytes())
 
-        else:
-            st.warning("Please upload an MP3 file to use the equalizer.")
+                    st.audio(temp_file.name, format="audio/wav")
+                    st.download_button(
+                        label="Download Equalized Audio",
+                        data=open(temp_file.name, "rb").read(),
+                        file_name="equalized.wav",
+                        mime="audio/wav"
+                    )
+
+            except Exception as e:
+                st.error(f"Error processing the audio file: {e}")

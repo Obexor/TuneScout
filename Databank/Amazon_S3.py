@@ -52,7 +52,7 @@ class S3Manager:
 
     def get_presigned_url(self, s3_key, expiry=3600):
         try:
-            response = self.s3_client.generate_presigned_url('get_object', Params={
+            response = self.s3.generate_presigned_url('get_object', Params={
                 'Bucket': self.bucket_name,
                 'Key': s3_key
             }, ExpiresIn=expiry)
