@@ -2,6 +2,12 @@ import pyaudio
 import wave
 
 def record_audio(output_file, duration=5):
+    """
+    Record audio from the microphone and save it to a WAV file.
+
+    :param output_file: The name of the output WAV file
+    :param duration: Duration of the recording in seconds (default is 5 seconds)
+    """
     # Audio configuration parameters
     FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
     CHANNELS = 1  # Number of audio channels (1 for mono)
@@ -18,8 +24,8 @@ def record_audio(output_file, duration=5):
 
     # Read audio data from the input stream
     for _ in range(0, int(RATE / CHUNK * duration)):
-        data = stream.read(CHUNK)
-        frames.append(data)
+        data = stream.read(CHUNK)  # Read a chunk of audio data
+        frames.append(data)  # Append the chunk to the frames list
 
     # Stop and close the audio stream
     stream.stop_stream()
@@ -35,4 +41,4 @@ def record_audio(output_file, duration=5):
         wf.setframerate(RATE)  # Set the frame rate (sampling rate)
         wf.writeframes(b''.join(frames))  # Write audio frames to the file
 
-    
+
