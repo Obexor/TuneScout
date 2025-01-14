@@ -1,8 +1,8 @@
-# 🎵 Streamlit Music Upload and Streaming App
+# 🎵 Streamlit Music Upload, Streaming, and Equalizer App
 
-A simple yet powerful web application built with **Streamlit** that allows users to upload music, store its metadata and audio fingerprints in **Amazon DynamoDB**, and stream songs securely using pre-signed URLs from **Amazon S3**.
+A simple yet powerful web application built with **Streamlit** that allows users to upload music, store its metadata and audio fingerprints in **Amazon DynamoDB**, and stream songs securely using pre-signed URLs from **Amazon S3**. Additionally, it includes an equalizer feature for enhancing the audio playback experience.
 
-This project demonstrates the integration of cloud services with a user-friendly interface for music upload, metadata management, deduplication using fingerprints, and secure streaming.
+This project demonstrates the integration of cloud services with a user-friendly interface for music upload, metadata management, deduplication using fingerprints, secure streaming, and audio equalization.
 
 ---
 
@@ -20,7 +20,11 @@ This project demonstrates the integration of cloud services with a user-friendly
    - List all uploaded songs.
    - Securely stream songs from AWS S3 using pre-signed URLs.
 
-4. **AWS Integration**:
+4. **Audio Equalizer**:
+   - Adjust audio frequencies to enhance playback.
+   - Save and apply custom equalizer settings.
+
+5. **AWS Integration**:
    - **DynamoDB**: Store song metadata and fingerprints.
    - **S3**: Store audio files and generate pre-signed URLs for secure access.
 
@@ -41,6 +45,7 @@ This project demonstrates the integration of cloud services with a user-friendly
     - [pandas](https://pandas.pydata.org/): For any data manipulation.
     - [numpy](https://numpy.org/): To support fingerprint generation.
     - [Jinja2](https://palletsprojects.com/p/jinja/): For rendering templates if needed.
+    - [pydub](https://pydub.com/): For audio processing and equalization.
 
 ---
 
@@ -140,6 +145,10 @@ This project demonstrates the integration of cloud services with a user-friendly
    - List uploaded songs and their metadata from DynamoDB.
    - Use pre-signed URLs to securely stream files directly from S3 in the browser.
 
+### 4. **Audio Equalizer**
+   - Adjust audio frequencies (bass, mid, treble) to enhance playback.
+   - Save custom equalizer settings for future use.
+
 ---
 
 ## ❓ FAQs
@@ -153,6 +162,9 @@ This project demonstrates the integration of cloud services with a user-friendly
 ### 3. **What happens if metadata is missing?**
    The app uses default values (e.g., "Unknown Title", "Unknown Artist") if metadata is not provided.
 
+### 4. **How does the equalizer work?**
+   The equalizer allows users to adjust audio frequencies to enhance playback. Users can save their custom settings and apply them to any song.
+
 ---
 
 ## 🤝 Contributions
@@ -163,12 +175,15 @@ Contributions are welcomed! Fork the repository, create a branch, and start a pu
 
 ## 📝 License
 
+
 ---
 
 ## 📧 Contact
 
 If you have any questions or need support, feel free to reach out to:
 
-👤 **Tobias Obwexer, Lennard Pöll**  
-📧 [your.email@example.com](mailto:your.email@example.com)
-📧 [your.email@example.com](mailto:your.email@example.com)
+👤 **Tobias Obwexer**  
+📧 [Ot8569@mci4me.at](mailto:Ot8569@mci4me.at)
+
+👤 **Lennard Pöll**  
+📧 [pl5525@mci4me.at](mailto:pl5525@mci4me.at)
