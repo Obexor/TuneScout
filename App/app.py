@@ -1,13 +1,10 @@
-import streamlit as st
-import numpy as np
-import os
-import soundfile as sf
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
 from equalizer.filters import butter_lowpass_filter, butter_highpass_filter, equalizer
-import matplotlib.pyplot as plt
+from equalizer.equalizer_functions import equalizer_features  # Import the new equalizer functions
+
 
 
 
@@ -224,79 +221,17 @@ class StreamlitApp:
             self.equalizer_features()
 
     def equalizer_features(self):
-        st.header("Equalizer")
-        st.write("This feature allows you to modify and equalize uploaded or streamed WAV/MP3 files in real-time.")
+        equalizer_features()  # Call the function from the new file
 
-        # Option to select between uploading a file or streaming from AWS S3
-        input_mode = st.radio(
-            "Choose Source",
-            options=["Upload a File", "Stream from AWS S3"],
-            index=0
-        )
-
-        uploaded_file = None
-        uploaded_file = st.file_uploader("Upload a WAV or MP3 file", type=["wav", "mp3"])
-        # If a file is either uploaded or streamed, proceed with processing
-        if uploaded_file:
-            st.subheader("Equalizer Settings")
-            bass_gain = st.slider("Bass Gain (dB)", -10, 10, 0)
-            midrange_gain = st.slider("Midrange Gain (dB)", -10, 10, 0)
-            treble_gain = st.slider("Treble Gain (dB)", -10, 10, 0)
-
-            # Process the file
-            try:
-                import tempfile
-                import wave
-
-                # Handle WAV and MP3 files
-                file_type = uploaded_file.name.split(".")[-1].lower()
-
-                if file_type == "wav":
-                    with wave.open(uploaded_file, "rb") as wav_file:
-                        params = wav_file.getparams()
-                        raw_data = wav_file.readframes(params.nframes)
-                        frame_rate = params.framerate
-                elif file_type == "mp3":
-                    data, frame_rate = sf.read(uploaded_file)
-                    raw_data = (data * (2 ** 15 - 1)).astype(np.int16).tobytes()
-                else:
-                    st.error("Unsupported file type. Please upload a WAV or MP3 file.")
-                    return
-
-                audio_signal = np.frombuffer(raw_data, dtype=np.int16)
-                time = np.linspace(0, len(audio_signal) / frame_rate, len(audio_signal))
-
-                # Apply filters to adjust bass, midrange, and treble frequencies
-                bass = butter_lowpass_filter(audio_signal, cutoff=200, fs=frame_rate, gain=bass_gain)
-                midrange = equalizer(audio_signal, freq_range=(200, 3000), fs=frame_rate, gain=midrange_gain)
-                treble = butter_highpass_filter(audio_signal, cutoff=3000, fs=frame_rate, gain=treble_gain)
-                equalized_signal = bass + midrange + treble
-
-                # Visualization
-                st.subheader("Equalized Signal Visualization")
-                fig, ax = plt.subplots(figsize=(10, 4))
-                ax.plot(time, equalized_signal, label="Equalized Signal")
-                ax.set_xlabel("Time (s)")
-                ax.set_ylabel("Amplitude")
-                ax.legend()
-                st.pyplot(fig)
-
-                # Save the equalized audio as a WAV file
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-                    with wave.open(temp_file.name, "wb") as out_wav:
-                        out_wav.setnchannels(1)  # Mono
-                        out_wav.setsampwidth(2)  # 16-bit depth
-                        out_wav.setframerate(frame_rate)
-                        equalized_signal = np.clip(equalized_signal, -32768, 32767).astype(np.int16)
-                        out_wav.writeframes(equalized_signal.tobytes())
-
-                    st.audio(temp_file.name, format="audio/wav")
-                    st.download_button(
-                        label="Download Equalized Audio",
-                        data=open(temp_file.name, "rb").read(),
-                        file_name="equalized.wav",
-                        mime="audio/wav"
-                    )
-
-            except Exception as e:
-                st.error(f"Error processing the audio file: {e}")
+    def run(self):
+        app_mode = st.sidebar.selectbox("Choose the app mode", ["Upload Song", "Compare Uploaded Song", "Compare Recorded Song", "Stream Songs", "Equalizer"])
+        if app_mode == "Upload Song":
+            self.upload_song_with_metadata()
+        elif app_mode == "Compare Uploaded Song":
+            self.compare_uploaded_song()
+        elif app_mode == "Compare Recorded Song":
+            self.compare_recorded_song()
+        elif app_mode == "Stream Songs":
+            self.stream_uploaded_song()
+        elif app_mode == "Equalizer":
+            self.equalizer_features()
