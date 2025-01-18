@@ -1,10 +1,14 @@
+import streamlit as st
+import numpy as np
+import os
+import soundfile as sf
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
 from equalizer.filters import butter_lowpass_filter, butter_highpass_filter, equalizer
-from equalizer.equalizer_functions import equalizer_features  # Import the new equalizer functions
-
+import matplotlib.pyplot as plt
+from equalizer.features import equalizer_features
 
 
 
@@ -218,20 +222,4 @@ class StreamlitApp:
         elif app_mode == "Stream Songs":
             self.stream_uploaded_song()
         elif app_mode == "Equalizer":
-            self.equalizer_features()
-
-    def equalizer_features(self):
-        equalizer_features()  # Call the function from the new file
-
-    def run(self):
-        app_mode = st.sidebar.selectbox("Choose the app mode", ["Upload Song", "Compare Uploaded Song", "Compare Recorded Song", "Stream Songs", "Equalizer"])
-        if app_mode == "Upload Song":
-            self.upload_song_with_metadata()
-        elif app_mode == "Compare Uploaded Song":
-            self.compare_uploaded_song()
-        elif app_mode == "Compare Recorded Song":
-            self.compare_recorded_song()
-        elif app_mode == "Stream Songs":
-            self.stream_uploaded_song()
-        elif app_mode == "Equalizer":
-            self.equalizer_features()
+            equalizer_features()
