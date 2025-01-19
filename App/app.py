@@ -268,7 +268,7 @@ class StreamlitApp:
         if session_state["authenticated"]:
             st.title("Song Recognition and Streaming App")
             app_mode = st.sidebar.radio("Choose a function",
-                                    ["Upload Song", #"Compare Uploaded Song",
+                                    ["Upload Song", "Compare Uploaded Song",
                                      "Compare Recorded Song", "Stream Songs", "Equalizer"])
 
             if app_mode == "Upload Song":
