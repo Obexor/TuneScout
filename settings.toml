@@ -1,0 +1,7 @@
+   [default]
+    AWS_ACCESS_KEY_ID="AKIA5CBDRHXJO6LVICTM"
+    AWS_SECRET_ACCESS_KEY="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"
+    AWS_REGION="eu-north-1"
+    AWS_TABLE_NAME="SongsFingerprints"
+    AWS_BUCKET_NAME="song-storage-bucket"
+    AWS_USER_TABLE_NAME="User"
