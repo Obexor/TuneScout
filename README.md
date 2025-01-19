@@ -173,10 +173,6 @@ Contributions are welcomed! Fork the repository, create a branch, and start a pu
 
 ---
 
-## 📝 License
-
-
----
 
 ## 📧 Contact
 

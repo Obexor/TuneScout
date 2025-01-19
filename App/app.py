@@ -35,7 +35,7 @@ class StreamlitApp:
     """
     def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name, user_table):
         self.db_manager = ADC(aws_access_key_id, aws_secret_access_key, region_name, table_name)
-        self.bucket_name = bucket_name
+        self.s3_manager = S3Manager(aws_access_key_id, aws_secret_access_key, region_name, bucket_name)
         self.user_manager = UserManager(aws_access_key_id, aws_secret_access_key, region_name, user_table)
 
     def authenticate_user(self):
