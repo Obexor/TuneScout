@@ -67,7 +67,7 @@ def equalizer_features():
             ax.plot(time, equalized_signal, label="Equalized Signal")
             ax.set_xlabel("Time (s)")
             ax.set_ylabel("Amplitude")
-            ax.legend()
+            ax.legend(loc="upper right")  # Specify a fixed location for the legend
             st.pyplot(fig)
 
             # Save the equalized audio as a WAV file
