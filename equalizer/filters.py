@@ -45,7 +45,7 @@ def equalizer(data, freq_range, fs, order=5, gain=1.0):
     :param gain: Gain to apply to the filtered signal
     :return: Filtered audio signal with applied gain
     """
-    low, high = freq_range  # Define band range (e.g., (200, 3000) for midrange)
+    low, high = freq_range  # Define band range
     nyquist = 0.5 * fs  # Nyquist frequency
     low_normal = low / nyquist  # Normalized low cutoff frequency
     high_normal = high / nyquist  # Normalized high cutoff frequency
