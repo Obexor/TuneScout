@@ -10,7 +10,7 @@ def equalizer_features():
     adjust equalizer settings, and visualize and download the equalized audio.
     """
     st.header("Equalizer")
-    st.write("This feature allows you to modify and equalize uploaded or streamed WAV/MP3 files in real-time.")
+    st.write("This feature allows you to modify and equalize uploaded or streamed WAV/MP3 files.")
 
     # Option to select between uploading a file or streaming from AWS S3
     input_mode = st.radio(

@@ -235,8 +235,6 @@ class StreamlitApp:
                             try:
                                 try:
                                     song_uri = self.s3_manager.get_presigned_url(s3_key)
-                                    print(song_uri)
-
                                     if not song_uri:
                                         st.error(f"Failed to generate a streaming URL for '{title}'.")
                                     else:
