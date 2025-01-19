@@ -99,6 +99,10 @@ class StreamlitApp:
 
                 # Step 8: Upload Song File to S3
                 st.info("Uploading the song file to S3...")
+                # Save the uploaded file locally
+                with open(uploaded_file.name, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                # Upload to S3
                 self.s3_manager.upload_file(
                     uploaded_file.name,
                     f"songs/{uploaded_file.name}"  # Place files in the 'songs/' folder in S3
