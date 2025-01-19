@@ -1,15 +1,20 @@
 import streamlit as st
-import numpy as np
 import os
-import soundfile as sf
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
-from equalizer.filters import butter_lowpass_filter, butter_highpass_filter, equalizer
-import matplotlib.pyplot as plt
 from equalizer.features import equalizer_features
+from Databank.User_Management import UserManager
+import bcrypt
+from streamlit import session_state
 
+# Initialize the Streamlit application
+if "authenticated" not in session_state:
+    session_state["authenticated"] = False
+if "user" not in session_state:
+    session_state["user"] = None
+session_state["initialize_app"] = False
 
 
 class StreamlitApp:
@@ -28,10 +33,43 @@ class StreamlitApp:
     :ivar s3_manager: Manages S3 operations, such as uploading and streaming song files.
     :type s3_manager: S3Manager
     """
-    def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name):
+    def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name, user_table):
         self.db_manager = ADC(aws_access_key_id, aws_secret_access_key, region_name, table_name)
         self.bucket_name = bucket_name
-        self.s3_manager = S3Manager(aws_access_key_id, aws_secret_access_key, region_name, bucket_name)
+        self.user_manager = UserManager(aws_access_key_id, aws_secret_access_key, region_name, user_table)
+
+    def authenticate_user(self):
+        st.header("Login")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            enc_password = self.user_manager.get_user_password(password)
+            if enc_password is None:
+                st.error("Invalid username or password.")
+                return
+            hashed_password = self.user_manager.get_user_password(username)
+            if not bcrypt.checkpw(enc_password.encode(), hashed_password.encode()):
+                session_state["authenticated"] = True
+                session_state["user"] = username
+                st.success(f"Welcome, {username}!")
+
+            else:
+                st.error("Invalid username or password.")
+
+    def sign_up_user(self):
+        st.header("Sign Up")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Sign Up"):
+            if not username or not password:
+                st.error("All fields are required.")
+                return
+            hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+            success = self.user_manager.create_user(username, hashed_password)
+            if success:
+                st.success("User created successfully! Please log in.")
+            else:
+                st.error("Sign-up failed. The username may already exist.")
 
     def upload_song_with_metadata(self):
         st.header("Upload Song with Metadata")
@@ -210,20 +248,34 @@ class StreamlitApp:
             st.error(f"Error fetching songs: {e}")
 
     def run(self):
-        st.title("Song Recognition and Streaming App")
-        st.sidebar.title("Navigation")
-        app_mode = st.sidebar.radio("Choose a function",
-                                ["Upload Song", "Compare Uploaded Song",
-                                 "Compare Recorded Song", "Stream Songs", "Equalizer"])
-        
-        
-        if app_mode == "Upload Song":
-            self.upload_song_with_metadata()
-        elif app_mode == "Compare Uploaded Song":
-            self.compare_uploaded_song()
-        elif app_mode == "Compare Recorded Song":
-            self.compare_recorded_song()
-        elif app_mode == "Stream Songs":
-            self.stream_uploaded_song()
-        elif app_mode == "Equalizer":
-            equalizer_features()
+        if not session_state["authenticated"]:
+            st.sidebar.title("Welcome")
+            auth_mode = st.sidebar.radio("Choose an option", ["Login", "Sign Up"])
+            if auth_mode == "Login":
+                self.authenticate_user()
+            elif auth_mode == "Sign Up":
+                self.sign_up_user()
+            return
+
+        st.sidebar.title(f"Welcome, {session_state['user']}!")
+        if st.sidebar.button("Logout"):
+            session_state["authenticated"] = False
+            session_state["user"] = None
+            return
+
+        if session_state["authenticated"]:
+            st.title("Song Recognition and Streaming App")
+            app_mode = st.sidebar.radio("Choose a function",
+                                    ["Upload Song", "Compare Uploaded Song",
+                                     "Compare Recorded Song", "Stream Songs", "Equalizer"])
+
+            if app_mode == "Upload Song":
+                self.upload_song_with_metadata()
+            elif app_mode == "Compare Uploaded Song":
+                self.compare_uploaded_song()
+            elif app_mode == "Compare Recorded Song":
+                self.compare_recorded_song()
+            elif app_mode == "Stream Songs":
+                self.stream_uploaded_song()
+            elif app_mode == "Equalizer":
+                equalizer_features()
