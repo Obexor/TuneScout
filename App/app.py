@@ -175,6 +175,7 @@ class StreamlitApp:
                 except Exception as e:
                     st.error(f"Error comparing song: {e}")
 
+
     def compare_recorded_song(self):
         st.header("Compare Recorded Song")
         if st.button("Record and Compare"):
@@ -197,6 +198,7 @@ class StreamlitApp:
                         st.warning("No match found.")
             except Exception as e:
                 st.error(f"Error recording and comparing audio: {e}")
+
 
     def stream_uploaded_song(self):
         st.header("Stream Uploaded Songs")
@@ -266,7 +268,7 @@ class StreamlitApp:
         if session_state["authenticated"]:
             st.title("Song Recognition and Streaming App")
             app_mode = st.sidebar.radio("Choose a function",
-                                    ["Upload Song", "Compare Uploaded Song",
+                                    ["Upload Song", #"Compare Uploaded Song",
                                      "Compare Recorded Song", "Stream Songs", "Equalizer"])
 
             if app_mode == "Upload Song":

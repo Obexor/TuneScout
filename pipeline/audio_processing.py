@@ -1,6 +1,6 @@
 import sounddevice as sd
 import wave
-import numpy as np
+
 
 def record_audio(output_file, duration=10):
     """
