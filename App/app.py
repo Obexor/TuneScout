@@ -10,8 +10,6 @@ import bcrypt
 from streamlit import session_state
 
 # Initialize the Streamlit application
-# Check if authentication status and user session variables exist, initialize them if not
-# These variables will track user authentication and app initialization states
 if "authenticated" not in session_state:
     session_state["authenticated"] = False
 if "user" not in session_state:
@@ -20,8 +18,6 @@ session_state["initialize_app"] = False
 
 
 class StreamlitApp:
-    # Main class to handle the song recognition and streaming app functionalities
-    # Provides methods for authentication, song uploading, comparison, streaming, and more
     """
     Handles functionalities for a Streamlit-based song recognition and streaming application.
 
@@ -36,84 +32,67 @@ class StreamlitApp:
     :type bucket_name: str
     :ivar s3_manager: Manages S3 operations, such as uploading and streaming song files.
     :type s3_manager: S3Manager
-    :ivar user_manager: Manages user operations, including authentication and user creation.
-    :type user_manager: UserManager
     """
     def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name, user_table):
-        # Constructor initializes AWS-related managers (DynamoDB for metadata, S3 for storage)
-        # Sets up database manager, bucket name, and user management functionality
         self.db_manager = ADC(aws_access_key_id, aws_secret_access_key, region_name, table_name)
         self.bucket_name = bucket_name
         self.user_manager = UserManager(aws_access_key_id, aws_secret_access_key, region_name, user_table)
 
     def authenticate_user(self):
-        # Handles user authentication by verifying username and password
-        # Updates session state upon successful login
         st.header("Login")
-        username = st.text_input("Username")  # Input field for username
-        password = st.text_input("Password", type="password")  # Input field for password (masked)
-        if st.button("Login"):  # Login button triggers authentication process
-
-            enc_password = self.user_manager.get_user_password(password)  # Encrypt the input password for comparison
-            # Check if the username exists in the database
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            enc_password = self.user_manager.get_user_password(password)
             if enc_password is None:
                 st.error("Invalid username or password.")
                 return
-            hashed_password = self.user_manager.get_user_password(username)  # Retrieve stored hashed password
-            # Validate the input password against the stored hashed password
+            hashed_password = self.user_manager.get_user_password(username)
             if not bcrypt.checkpw(enc_password.encode(), hashed_password.encode()):
                 session_state["authenticated"] = True
                 session_state["user"] = username
                 st.success(f"Welcome, {username}!")
 
-            else:  # Handle failed authentication
+            else:
                 st.error("Invalid username or password.")
 
     def sign_up_user(self):
-        # Allows users to sign up by creating a username and password
-        # Performs data validation and saves the user information in DynamoDB
         st.header("Sign Up")
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Sign Up"):
-            if not username or not password:  # Ensure both fields are filled
+            if not username or not password:
                 st.error("All fields are required.")
                 return
-            hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()  # Encrypt the password
-            # Save the new user credentials in the database
+            hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
             success = self.user_manager.create_user(username, hashed_password)
-            if success:  # Provide user feedback on successful or failed sign-up
+            if success:
                 st.success("User created successfully! Please log in.")
             else:
                 st.error("Sign-up failed. The username may already exist.")
 
     def upload_song_with_metadata(self):
-        # Handles song uploads with metadata input by user
-        # Steps: File upload, metadata entry, fingerprint generation, duplicate check, and S3 upload
         st.header("Upload Song with Metadata")
 
-        # Step 1: File Upload
-        # User uploads a song (supported types: MP3/WAV)
+        # Step 1: Upload File and get filetype
         uploaded_file = st.file_uploader("Upload a song (MP3/WAV)", type=["mp3", "wav"])
 
         # Step 2: Metadata Input
-        artist = st.text_input("Artist", "Unknown")  # Artist input (default: "Unknown")
-        title = st.text_input("Title", "Unknown Title")  # Title input (default: "Unknown Title")
-        album = st.text_input("Album", "Unknown Album")  # Album input (default: "Unknown Album")
+        artist = st.text_input("Artist", "Unknown")  # Default value as "Unknown"
+        title = st.text_input("Title", "Unknown Title")
+        album = st.text_input("Album", "Unknown Album")
 
         # Confirm upload
-        if st.button("Upload Song"):  # Upload button triggers the file and metadata processing
-            # Validate uploaded file and metadata input
+        if st.button("Upload Song"):
             if not uploaded_file:
                 st.error("Please upload a valid MP3 or WAV file.")
                 return
 
             try:
                 # Step 3: Assign Metadata
-                # Organize the metadata provided by the user into a dictionary
                 song_data = {
                     "artist": artist.strip() or "Unknown",
-                    "title": title.strip() or "Unknown Title",  # Use default title if input is empty
+                    "title": title.strip() or "Unknown Title",
                     "album": album.strip() or "Unknown Album",
                     "s3_key": f"songs/{uploaded_file.name}"
                 }
@@ -121,11 +100,10 @@ class StreamlitApp:
                     f"Processing: Title='{song_data['title']}', Artist='{song_data['artist']}', Album='{song_data['album']}'")
 
                 # Step 4: Generate Song ID
-                song_id = self.db_manager.get_latest_song_id() + 1  # Generate unique Song ID based on the latest ID
+                song_id = self.db_manager.get_latest_song_id() + 1
 
                 # Step 5: Generate Fingerprints
-                st.info("Generating fingerprints for the song...")  # Inform user about the fingerprinting process
-                # Determine the file extension of the uploaded file
+                st.info("Generating fingerprints for the song...")
                 file_type = os.path.splitext(uploaded_file.name)[1][1:]
                 fingerprints = generate_hashes(
                     uploaded_file,  # Input file
@@ -137,12 +115,12 @@ class StreamlitApp:
                     song_data['s3_key']  # S3-Key
                 )
 
-                if not fingerprints:  # Stop process if fingerprint generation fails
+                if not fingerprints:
                     st.error("Fingerprint generation failed. Cannot proceed with uploading.")
                     return
                 # Step 6: Check for Existing Song
                 st.info("Checking if the song already exists in the database...")
-                existing_match = self.db_manager.find_song_by_hashes(fingerprints)  # Check for duplicates in the database
+                existing_match = self.db_manager.find_song_by_hashes(fingerprints)
 
                 if existing_match:
                     st.warning(f"The song already exists in the database.")
@@ -150,8 +128,7 @@ class StreamlitApp:
                     return
 
                 # Step 7: Store Metadata and Fingerprints in DynamoDB
-                st.info("Storing song metadata and fingerprints in the database...")  # Feedback for database storage process
-                # Save the song metadata and fingerprints in DynamoDB
+                st.info("Storing song metadata and fingerprints in the database...")
                 stored = self.db_manager.store_song(song_data, fingerprints)
 
                 if not stored:
@@ -159,8 +136,7 @@ class StreamlitApp:
                     return
 
                 # Step 8: Upload Song File to S3
-                st.info("Uploading the song file to S3...")  # Feedback for S3 upload process
-                # Temporarily save the song locally for S3 upload
+                st.info("Uploading the song file to S3...")
                 # Save the uploaded file locally
                 with open(uploaded_file.name, "wb") as f:
                     f.write(uploaded_file.getbuffer())
@@ -172,12 +148,10 @@ class StreamlitApp:
 
                 st.success(f"Successfully uploaded '{song_data['title']}' by '{song_data['artist']}'!")
 
-            except Exception as e:  # Catch any issues during upload and fingerprint generation
+            except Exception as e:
                 st.error(f"Error occurred during upload: {str(e)}")
 
     def compare_uploaded_song(self):
-        # Allows users to upload a song and compare it against songs in the database
-        # Steps: Upload song, generate fingerprints, retrieve matches from database
         st.header("Compare Uploaded Song")
         compare_file = st.file_uploader("Upload a song to compare", type=["mp3", "wav"])
         if compare_file:
