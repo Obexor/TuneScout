@@ -1,5 +1,6 @@
-import pyaudio
+import sounddevice as sd
 import wave
+import numpy as np
 
 def record_audio(output_file, duration=10):
     """
@@ -9,36 +10,16 @@ def record_audio(output_file, duration=10):
     :param duration: Duration of the recording in seconds (default is 10 seconds)
     """
     # Audio configuration parameters
-    FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
+    SAMPLE_RATE = 44100  # Sampling rate in Hz (CD quality)
     CHANNELS = 1  # Number of audio channels (1 for mono)
-    RATE = 44100  # Sampling rate in Hz (CD quality)
-    CHUNK = 1024  # Buffer size for audio data
 
-    # Initialize PyAudio instance
-    audio = pyaudio.PyAudio()
-    
-    # Open a stream for audio input
-    stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+    # Record audio data using sounddevice
+    audio_data = sd.rec(int(duration * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='int16')
+    sd.wait()  # Wait until the recording is finished
 
-    frames = []  # List to store audio data frames
-
-    # Read audio data from the input stream
-    for _ in range(0, int(RATE / CHUNK * duration)):
-        data = stream.read(CHUNK)  # Read a chunk of audio data
-        frames.append(data)  # Append the chunk to the frames list
-
-    # Stop and close the audio stream
-    stream.stop_stream()
-    stream.close()
-    
-    # Terminate the PyAudio instance
-    audio.terminate()
-
-    # Save recorded audio to a WAV file
+    # Save recorded audio data to a WAV file
     with wave.open(output_file, 'wb') as wf:
         wf.setnchannels(CHANNELS)  # Set the number of audio channels
-        wf.setsampwidth(audio.get_sample_size(FORMAT))  # Set the sample width
-        wf.setframerate(RATE)  # Set the frame rate (sampling rate)
-        wf.writeframes(b''.join(frames))  # Write audio frames to the file
-
-
+        wf.setsampwidth(2)  # Set the sample width (2 bytes for int16)
+        wf.setframerate(SAMPLE_RATE)  # Set the frame rate (sampling rate)
+        wf.writeframes(audio_data.tobytes())  # Write audio frames to the file
