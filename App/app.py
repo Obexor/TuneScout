@@ -141,7 +141,7 @@ class StreamlitApp:
         st.header("Compare Recorded Song")
         if st.button("Record and Compare"):
             try:
-                record_audio("recorded_compare.wav", duration=5)
+                record_audio("recorded_compare.wav")
                 with open("recorded_compare.wav", "rb") as recorded_file:
                     file_type = os.path.splitext("recorded_compare.wav")[1][1:]
                     compare_hashes = generate_hashes(recorded_file, file_type, self.db_manager.get_latest_song_id() + 1, "", "",

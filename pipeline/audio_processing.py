@@ -1,12 +1,12 @@
 import pyaudio
 import wave
 
-def record_audio(output_file, duration=5):
+def record_audio(output_file, duration=10):
     """
     Record audio from the microphone and save it to a WAV file.
 
     :param output_file: The name of the output WAV file
-    :param duration: Duration of the recording in seconds (default is 5 seconds)
+    :param duration: Duration of the recording in seconds (default is 10 seconds)
     """
     # Audio configuration parameters
     FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
