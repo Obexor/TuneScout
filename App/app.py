@@ -233,12 +233,17 @@ class StreamlitApp:
                     if st.button(f"Stream {title}", key=f"stream-{index}"):
                         with st.spinner("Fetching the song..."):  # Show a spinner while streaming is initialized
                             try:
-                                # Generate the pre-signed URL for streaming from S3
-                                song_uri = self.s3_manager.get_presigned_url(s3_key)
-                                if not song_uri:
-                                    st.error(f"Failed to generate a streaming URL for '{title}'.")
-                                else:
-                                    # Stream the audio using the Streamlit audio player
+                                try:
+                                    song_uri = self.s3_manager.get_presigned_url(s3_key)
+                                    print(song_uri)
+
+                                    if not song_uri:
+                                        st.error(f"Failed to generate a streaming URL for '{title}'.")
+                                    else:
+                                        # Stream the audio using the Streamlit audio player
+                                        st.audio(song_uri, format="audio/mp3")  # Use the URI to play the audio
+                                except Exception as e:
+                                    st.error(f"Error: The song '{title}' is missing or could not be accessed in S3. Details: {e}")
                                     st.audio(song_uri, format="audio/mp3")  # Use the URI to play the audio
                             except Exception as e:
                                 st.error(f"Error while streaming '{title}': {e}")
@@ -250,6 +255,7 @@ class StreamlitApp:
             st.error(f"Error fetching songs: {e}")
 
     def run(self):
+
         if not session_state["authenticated"]:
             st.sidebar.title("Welcome")
             auth_mode = st.sidebar.radio("Choose an option", ["Login", "Sign Up"])
