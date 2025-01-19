@@ -1,8 +1,8 @@
 import streamlit as st
 import numpy as np
-import soundfile as sf
 import matplotlib.pyplot as plt
 from equalizer.filters import butter_lowpass_filter, butter_highpass_filter, equalizer
+from pydub import AudioSegment
 
 def equalizer_features():
     """
@@ -42,8 +42,11 @@ def equalizer_features():
                     raw_data = wav_file.readframes(params.nframes)
                     frame_rate = params.framerate
             elif file_type == "mp3":
-                data, frame_rate = sf.read(uploaded_file)
-                raw_data = (data * (2 ** 15 - 1)).astype(np.int16).tobytes()
+                # Use pydub to read and convert MP3 to raw data
+                audio_segment = AudioSegment.from_file(uploaded_file, format="mp3")
+                audio_segment = audio_segment.set_channels(1)  # Convert to mono
+                frame_rate = audio_segment.frame_rate
+                raw_data = np.array(audio_segment.get_array_of_samples()).astype(np.int16).tobytes()
             else:
                 st.error("Unsupported file type. Please upload a WAV or MP3 file.")
                 return
