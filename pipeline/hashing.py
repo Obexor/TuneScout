@@ -1,6 +1,10 @@
 import hashlib
 import wave
 import os
+import hashlib
+from scipy.ndimage import maximum_filter
+import numpy as np
+
 
 def generate_hashes(audio_file, file_format, song_id, artist, title, album, s3_key):
     """
@@ -64,3 +68,64 @@ def get_file_format(file_path):
     """
     file_format = os.path.splitext(file_path)[1][1:]  # Extract the file extension and remove the dot
     return file_format
+
+def find_peaks(Sxx, threshold=0.1):
+    """
+    Find peak points in the spectrogram data.
+
+    :param Sxx: Spectrogram (2D array)
+    :param threshold: Amplitude threshold to treat peaks as significant
+    :return: Boolean mask of peak positions
+    """
+    # Apply maximum filter to find local maxima
+    neighborhood = maximum_filter(Sxx, size=(20, 20), mode='constant')
+    peaks = (Sxx == neighborhood)  # Keep only maxima
+
+    # Apply threshold
+    peaks &= (Sxx >= threshold * Sxx.max())
+    return peaks
+
+def idxs_to_tf_pairs(peaks, t, f):
+    """
+    Convert peak indices into frequency-time pairs.
+
+    :param peaks: 2D boolean matrix with peak positions
+    :param t: Array of time points
+    :param f: Array of frequency values
+    :return: List of (time, frequency) pairs
+    """
+    peak_idxs = np.argwhere(peaks)  # Retrieve indices of True values
+    return [(t[idx[1]], f[idx[0]]) for idx in peak_idxs]
+
+def hash_point_pair(point_pair, song_id):
+    """
+    Hash a (time, frequency) point pair with the song ID.
+
+    :param point_pair: Tuple (time, frequency)
+    :param song_id: Song identifier
+    :return: SHA-256 hash of the point pair and song ID
+    """
+    hash_input = f"{point_pair[0]:.5f}-{point_pair[1]:.5f}-{song_id}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()
+
+
+def hash_points(points, song_id):
+    """
+    Hash a list of time-frequency points.
+
+    :param points: List of (time, frequency) pairs
+    :param song_id: Song identifier
+    :return: List of hashes for the points
+    """
+    return [hash_point_pair(point, song_id) for point in points]
+
+def get_file_format(file_path):
+    """
+    Extract the file format from the file path.
+
+    :param file_path: The path to the file
+    :return: The file format (e.g., 'wav', 'mp3')
+    """
+    file_format = os.path.splitext(file_path)[1][1:].lower()  # Extract the file extension and make lowercase
+    return file_format
+

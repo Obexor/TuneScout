@@ -136,16 +136,27 @@ class AmazonDBConnectivity:
             print(f"Failed to store hashes: {e.response['Error']['Message']}")
 
     def find_song_by_hashes(self, hashes):
+        """
+        Find a song in DynamoDB by matching fingerprints (hashes).
+
+        :param hashes: A list of hashes to search for
+        :return: Dictionary containing the matching song metadata, or None if not found
+        """
         try:
+            table = self.dynamodb_resource.Table(self.table_name)
+
             for hash_item in hashes:
-                result = self.fetch_item()
-                if result:
-                    for item in result:
-                        if item.get("Hash") == hash_item.get("Hash"):
-                            # Remove 'offset' and 'Hash' from the item
-                            filtered_item = {k: v for k, v in item.items() if k not in ["s3_key", "Hash"]}
-                            return filtered_item
-            return None
+                if not isinstance(hash_item, dict):
+                    print(f"Invalid hash_item: {hash_item}")
+                    continue
+
+                if "Hash" not in hash_item:
+                    print("Hash key missing in hash_item")
+                    continue
+
+                hash_item["SongID"] = song_data["SongID"]
+                self.insert_item(hash_item)
+
         except ClientError as e:
             print(f"Failed to find song by hashes: {e.response['Error']['Message']}")
             return None
