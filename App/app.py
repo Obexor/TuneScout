@@ -1,14 +1,11 @@
 import streamlit as st
-import os
-import numpy as np
+import bcrypt
+import tempfile
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
-from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
 from equalizer.features import equalizer_features
 from Databank.User_Management import UserManager
-import bcrypt
-import tempfile
 from pydub import AudioSegment
 from streamlit import session_state
 from pipeline.audio_processing import file_to_spectrogram
@@ -80,11 +77,11 @@ class StreamlitApp:
     def upload_song_with_metadata(self):
         st.header("Upload Song with Metadata")
 
-        # Step 1: Upload File and get filetype
+        # Step 1: Upload file
         uploaded_file = st.file_uploader("Upload a song (MP3/WAV)", type=["mp3", "wav"])
 
-        # Step 2: Metadata Input
-        artist = st.text_input("Artist", "Unknown")  # Default value as "Unknown"
+        # Step 2: Input metadata
+        artist = st.text_input("Artist", "Unknown")
         title = st.text_input("Title", "Unknown Title")
         album = st.text_input("Album", "Unknown Album")
 
@@ -95,13 +92,13 @@ class StreamlitApp:
                 return
 
             try:
-                # Step 3: File format detection
+                # Step 3: Detect file format
                 file_format = get_file_format(uploaded_file.name)
                 if file_format not in ["wav", "mp3"]:
-                    st.error("Unsupported file format. Supported formats are WAV and MP3.")
+                    st.error("Unsupported file format.")
                     return
 
-                # Check if the file is MP3, and convert to WAV if necessary
+                # Convert MP3 to WAV if necessary
                 if file_format == "mp3":
                     st.info("Converting MP3 to WAV format...")
                     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav_file:
@@ -109,74 +106,56 @@ class StreamlitApp:
                         audio.export(temp_wav_file.name, format="wav")
                         wav_file_path = temp_wav_file.name
                 else:
-                    uploaded_file.seek(0)  # Reset file pointer to the beginning
+                    uploaded_file.seek(0)
                     wav_file_path = uploaded_file
 
-                # Step 4: Assign Metadata
+                # Step 4: Prepare metadata
                 song_data = {
                     "artist": artist.strip() or "Unknown",
                     "title": title.strip() or "Unknown Title",
                     "album": album.strip() or "Unknown Album",
                     "s3_key": f"songs/{uploaded_file.name}"
                 }
-                st.info(
-                    f"Processing: Title='{song_data['title']}', Artist='{song_data['artist']}', Album='{song_data['album']}'")
+                st.info(f"Processing: {song_data}")
 
                 # Step 5: Generate Song ID
                 song_id = self.db_manager.get_latest_song_id() + 1
 
-                # Step 6: Generate Fingerprints
-                st.info("Calculating Spectrogram and generating Fingerprints...")
-                try:
-                    f, t, Sxx = file_to_spectrogram(wav_file_path)  # Process WAV file
-                    peaks = find_peaks(Sxx)
-                    tf_pairs = idxs_to_tf_pairs(peaks, t, f)
-                    fingerprints = hash_points(tf_pairs, title)
+                # Step 6: Generate fingerprints
+                st.info("Generating fingerprints...")
+                f, t, Sxx = file_to_spectrogram(wav_file_path)
+                peaks = find_peaks(Sxx)
+                tf_pairs = idxs_to_tf_pairs(peaks, t, f)
+                fingerprints = hash_points(tf_pairs, title)
 
-                    if not fingerprints:
-                        st.error("Fingerprint generation failed. Cannot proceed with uploading.")
-                        return
-
-                except Exception as e:
-                    st.error(f"Error while generating fingerprints: {e}")
+                if not fingerprints:
+                    st.error("Fingerprint generation failed.")
                     return
 
-                # Step 7: Check for Existing Song
-                st.info("Checking if the song already exists in the database...")
+                # Step 7: Check for existing song
+                st.info("Checking if song already exists...")
                 existing_match = self.db_manager.find_song_by_hashes(fingerprints)
-
                 if existing_match:
-                    if isinstance(existing_match, dict):  # Überprüfen, ob die Rückgabe ein Dictionary ist
-                        st.warning(f"The song already exists in the database.")
-                        st.json(existing_match)  # JSON anzeigen, falls es ein gültiges Dictionary ist
-                    else:
-                        st.error("An unexpected result was returned when checking for existing songs.")
-                        st.write("Received:", existing_match)  # Debug-Informationen anzeigen
+                    st.warning("The song already exists in the database.")
+                    st.json(existing_match)
                     return
 
-                # Step 8: Store Metadata and Fingerprints in DynamoDB
-                st.info("Storing song metadata and fingerprints in the database...")
-                stored = self.db_manager.store_song(song_data, fingerprints)
-
-                if not stored:
-                    st.error("Failed to store the song data in the database. Please try again.")
+                # Step 8: Store metadata and fingerprints
+                st.info("Storing song data in the database...")
+                if not self.db_manager.store_song(song_data, fingerprints):
+                    st.error("Failed to store the song data. Try again.")
                     return
 
-                # Step 9: Upload Song File to S3
+                # Step 9: Upload song file to S3
                 st.info("Uploading the song file to S3...")
-                # Save the uploaded file locally
                 with open(uploaded_file.name, "wb") as f:
                     f.write(uploaded_file.getbuffer())
-                # Upload to S3
-                self.s3_manager.upload_file(
-                    uploaded_file.name,
-                    f"songs/{uploaded_file.name}"  # Place files in the 'songs/' folder in S3
-                )
+                self.s3_manager.upload_file(uploaded_file.name, f"songs/{uploaded_file.name}")
 
                 st.success(f"Successfully uploaded '{song_data['title']}' by '{song_data['artist']}'!")
 
             except Exception as e:
-                st.error(f"Error occurred during upload: {str(e)}")
+                st.error(f"Error during upload: {str(e)}")
 
     def compare_uploaded_song(self):
         st.header("Compare Uploaded Song")
