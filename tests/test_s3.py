@@ -3,7 +3,7 @@ import pytest
 import os
 
 # Get S3 bucket name from environment variable
-BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 FILE_NAME = "test.txt"
 CONTENT = "Hello, AWS S3!"
 
