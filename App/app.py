@@ -1,6 +1,5 @@
 import streamlit as st
 import os
-import numpy as np
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
 from pipeline.hashing import generate_hashes
@@ -8,12 +7,7 @@ from pipeline.audio_processing import record_audio
 from equalizer.features import equalizer_features
 from Databank.User_Management import UserManager
 import bcrypt
-import tempfile
-from pydub import AudioSegment
 from streamlit import session_state
-from pipeline.audio_processing import file_to_spectrogram
-from pipeline.hashing import find_peaks, idxs_to_tf_pairs, hash_points
-from pipeline.hashing import get_file_format
 
 # Initialize the Streamlit application
 if "authenticated" not in session_state:
@@ -95,24 +89,7 @@ class StreamlitApp:
                 return
 
             try:
-                # Step 3: File format detection
-                file_format = get_file_format(uploaded_file.name)
-                if file_format not in ["wav", "mp3"]:
-                    st.error("Unsupported file format. Supported formats are WAV and MP3.")
-                    return
-
-                # Check if the file is MP3, and convert to WAV if necessary
-                if file_format == "mp3":
-                    st.info("Converting MP3 to WAV format...")
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav_file:
-                        audio = AudioSegment.from_file(uploaded_file, format="mp3")
-                        audio.export(temp_wav_file.name, format="wav")
-                        wav_file_path = temp_wav_file.name
-                else:
-                    uploaded_file.seek(0)  # Reset file pointer to the beginning
-                    wav_file_path = uploaded_file
-
-                # Step 4: Assign Metadata
+                # Step 3: Assign Metadata
                 song_data = {
                     "artist": artist.strip() or "Unknown",
                     "title": title.strip() or "Unknown Title",
@@ -122,39 +99,35 @@ class StreamlitApp:
                 st.info(
                     f"Processing: Title='{song_data['title']}', Artist='{song_data['artist']}', Album='{song_data['album']}'")
 
-                # Step 5: Generate Song ID
+                # Step 4: Generate Song ID
                 song_id = self.db_manager.get_latest_song_id() + 1
 
-                # Step 6: Generate Fingerprints
-                st.info("Calculating Spectrogram and generating Fingerprints...")
-                try:
-                    f, t, Sxx = file_to_spectrogram(wav_file_path)  # Process WAV file
-                    peaks = find_peaks(Sxx)
-                    tf_pairs = idxs_to_tf_pairs(peaks, t, f)
-                    fingerprints = hash_points(tf_pairs, title)
+                # Step 5: Generate Fingerprints
+                st.info("Generating fingerprints for the song...")
+                file_type = os.path.splitext(uploaded_file.name)[1][1:]
+                fingerprints = generate_hashes(
+                    uploaded_file,  # Input file
+                    file_type,
+                    song_id,  # Song ID
+                    song_data['artist'],  # Artist
+                    song_data['title'],  # Title
+                    song_data['album'], # Album
+                    song_data['s3_key']  # S3-Key
+                )
 
-                    if not fingerprints:
-                        st.error("Fingerprint generation failed. Cannot proceed with uploading.")
-                        return
-
-                except Exception as e:
-                    st.error(f"Error while generating fingerprints: {e}")
+                if not fingerprints:
+                    st.error("Fingerprint generation failed. Cannot proceed with uploading.")
                     return
-
-                # Step 7: Check for Existing Song
+                # Step 6: Check for Existing Song
                 st.info("Checking if the song already exists in the database...")
                 existing_match = self.db_manager.find_song_by_hashes(fingerprints)
 
                 if existing_match:
-                    if isinstance(existing_match, dict):  # Überprüfen, ob die Rückgabe ein Dictionary ist
-                        st.warning(f"The song already exists in the database.")
-                        st.json(existing_match)  # JSON anzeigen, falls es ein gültiges Dictionary ist
-                    else:
-                        st.error("An unexpected result was returned when checking for existing songs.")
-                        st.write("Received:", existing_match)  # Debug-Informationen anzeigen
+                    st.warning(f"The song already exists in the database.")
+                    st.json(existing_match)  # Display metadata or match information
                     return
 
-                # Step 8: Store Metadata and Fingerprints in DynamoDB
+                # Step 7: Store Metadata and Fingerprints in DynamoDB
                 st.info("Storing song metadata and fingerprints in the database...")
                 stored = self.db_manager.store_song(song_data, fingerprints)
 
@@ -162,7 +135,7 @@ class StreamlitApp:
                     st.error("Failed to store the song data in the database. Please try again.")
                     return
 
-                # Step 9: Upload Song File to S3
+                # Step 8: Upload Song File to S3
                 st.info("Uploading the song file to S3...")
                 # Save the uploaded file locally
                 with open(uploaded_file.name, "wb") as f:
@@ -181,21 +154,38 @@ class StreamlitApp:
     def compare_uploaded_song(self):
         st.header("Compare Uploaded Song")
         compare_file = st.file_uploader("Upload a song to compare", type=["mp3", "wav"])
-
         if compare_file:
             if st.button("Compare"):
                 try:
-                    # Step 1: Generate Fingerprints for the uploaded file
-                    st.info("Calculating Spectrogram and generating Fingerprints for the file...")
-                    f, t, Sxx = file_to_spectrogram(compare_file)
-                    peaks = find_peaks(Sxx)
-                    peaks_t_f = idxs_to_tf_pairs(peaks, t, f)
-                    compare_hashes = hash_points(peaks_t_f, compare_file.name)
-
-                    # Step 2: Find matches in the database
-                    st.info("Matching against the database...")
+                    song_id = self.db_manager.get_latest_song_id() + 1
+                    file_type = os.path.splitext(compare_file.name)[1][1:]
+                    compare_hashes = generate_hashes(compare_file, file_type , song_id, "", "", "","")
                     match = self.db_manager.find_song_by_hashes(compare_hashes)
+                    if match:
+                        st.success("Match found!")
+                        title = match.get('Title', 'Unknown Title')
+                        artist = match.get('Artist', 'Unknown Artist')
+                        album = match.get('Album', 'Unknown Album')
+                        st.subheader(f"**Title**: {title}")
+                        st.write(f"**Artist**: {artist}")
+                        st.write(f"**Album**: {album}")
 
+                    else:
+                        st.warning("No match found.")
+                except Exception as e:
+                    st.error(f"Error comparing song: {e}")
+
+
+    def compare_recorded_song(self):
+        st.header("Compare Recorded Song")
+        if st.button("Record and Compare"):
+            try:
+                record_audio("recorded_compare.wav")
+                with open("recorded_compare.wav", "rb") as recorded_file:
+                    file_type = os.path.splitext("recorded_compare.wav")[1][1:]
+                    compare_hashes = generate_hashes(recorded_file, file_type, self.db_manager.get_latest_song_id() + 1, "", "",
+                                                     "", "")
+                    match = self.db_manager.find_song_by_hashes(compare_hashes)
                     if match:
                         st.success("Match found!")
                         title = match.get('Title', 'Unknown Title')
@@ -206,40 +196,9 @@ class StreamlitApp:
                         st.write(f"**Album**: {album}")
                     else:
                         st.warning("No match found.")
-
-                except Exception as e:
-                    st.error(f"Error comparing song: {e}")
-
-    def compare_recorded_song(self):
-        st.header("Compare Recorded Song")
-        if st.button("Record and Compare"):
-            try:
-                # Step 1: Record audio
-                audio = record_audio("recorded_compare.wav")
-
-                # Step 2: Process the recorded audio
-                st.info("Calculating Spectrogram and generating Fingerprints for the recorded audio...")
-                f, t, Sxx = file_to_spectrogram(audio)
-                peaks = find_peaks(Sxx)
-                peaks_t_f = idxs_to_tf_pairs(peaks, t, f)
-                compare_hashes = hash_points(peaks_t_f, "recorded_compare.wav")
-
-                # Step 3: Find matches in the database
-                st.info("Matching against the database...")
-                match = self.db_manager.find_song_by_hashes(compare_hashes)
-
-                if match:
-                    st.success("Match found!")
-                    title = match.get('Title', 'Unknown Title')
-                    artist = match.get('Artist', 'Unknown Artist')
-                    album = match.get('Album', 'Unknown Album')
-                    st.subheader(f"**Title**: {title}")
-                    st.write(f"**Artist**: {artist}")
-                    st.write(f"**Album**: {album}")
-                else:
-                    st.warning("No match found.")
             except Exception as e:
                 st.error(f"Error recording and comparing audio: {e}")
+
 
     def stream_uploaded_song(self):
         st.header("Stream Uploaded Songs")

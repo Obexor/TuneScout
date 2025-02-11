@@ -1,8 +1,5 @@
 import sounddevice as sd
 import wave
-import numpy as np
-from scipy.signal import spectrogram
-
 
 
 def record_audio(output_file, duration=10):
@@ -26,27 +23,3 @@ def record_audio(output_file, duration=10):
         wf.setsampwidth(2)  # Set the sample width (2 bytes for int16)
         wf.setframerate(SAMPLE_RATE)  # Set the frame rate (sampling rate)
         wf.writeframes(audio_data.tobytes())  # Write audio frames to the file
-
-def file_to_spectrogram(audio_file):
-    """
-       Calculate the spectrogram of a given WAV file.
-
-       :param audio_file: Path to the audio file or a file-like object
-       :return: Frequencies (f), time points (t), and the spectrogram (Sxx)
-       """
-    try:
-        if hasattr(audio_file, "seek"):  # If the file is a file-like object, reset file pointer
-            audio_file.seek(0)
-
-        with wave.open(audio_file, 'rb') as wav_file:
-            sample_rate = wav_file.getframerate()
-            frames = wav_file.readframes(wav_file.getnframes())
-            audio_data = np.frombuffer(frames, dtype=np.int16)
-
-        # Compute the spectrogram
-        f, t, Sxx = spectrogram(audio_data, sample_rate, nperseg=2048, noverlap=1024)
-        return f, t, Sxx
-    except Exception as e:
-        raise ValueError(f"Error processing audio file for spectrogram: {e}")
-
-
