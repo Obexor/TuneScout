@@ -1,9 +1,10 @@
 [project]
-name = "TuneScout"
+name = "Software_Design_Project_New"
 version = "0.1.0"
 description = "Default template for PDM package"
 authors = [
     {name = "lennypoell", email = "pl5525@mci4me.at"},
+    {name = "Tobias Obwexer", email = "ot8569@mci4me.at"},
 ]
 dependencies = [
     "streamlit>=1.41.1",
@@ -24,5 +25,7 @@ readme = "README.md"
 license = {text = "MIT"}
 
 
+
 [tool.pdm]
 distribution = false
+
