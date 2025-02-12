@@ -1,66 +1,73 @@
-import hashlib
-import wave
-import os
+import uuid
+from pipeline.audio_processing import file_to_spectrogram, find_peaks, idxs_to_tf_pairs
+from pipeline import settings
 
-def generate_hashes(audio_file, file_format, song_id, artist, title, album, s3_key):
+
+def hash_point_pair(p1, p2):
     """
-    Generate a SHA-256 hash for the given audio file.
+    Generates a hash from two time-frequency points.
 
-    :param audio_file: The audio file to hash (file-like object or file path)
-    :param file_format: The format of the audio file ('wav' or 'mp3')
-    :param song_id: Unique identifier for the song
-    :param artist: Artist name
-    :param title: Song title
-    :param album: Album name
-    :param s3_key: S3 key for the audio file
-    :return: A list containing a dictionary with the hash and metadata, or None if an error occurs
+    :param p1: First frequency-time pair
+    :param p2: Second frequency-time pair
+    :return: Hash value
     """
-    try:
-        # Process WAV files
-        if file_format == 'wav':
-            if hasattr(audio_file, 'read'):  # If it's a file-like object
-                audio_file.seek(0)  # Ensure file pointer is at the beginning
-                with wave.open(audio_file, 'rb') as wav_file:
-                    frames = wav_file.readframes(wav_file.getnframes())
-            else:  # If it's a file path
-                with wave.open(audio_file, 'rb') as wav_file:
-                    frames = wav_file.readframes(wav_file.getnframes())
-            fingerprint = hashlib.sha256(frames).hexdigest()  # Generate SHA-256 hash
+    return hash((p1[0], p2[0], p2[1] - p1[1]))
 
-        # Process MP3 files
-        elif file_format == 'mp3':
-            if hasattr(audio_file, 'read'):  # If it's a file-like object
-                audio_file.seek(0)  # Ensure file pointer is at the beginning
-                raw_data = audio_file.read()
-            else:  # If it's a file path
-                with open(audio_file, 'rb') as f:
-                    raw_data = f.read()
-            fingerprint = hashlib.sha256(raw_data).hexdigest()  # Generate SHA-256 hash
 
-        else:
-            raise ValueError("Unsupported file format. Use 'wav' or 'mp3'.")
-
-        return [
-            {
-                "Hash": fingerprint,
-                "s3_key": s3_key,
-                "SongID": song_id,
-                "Artist": artist,
-                "Title": title,
-                "Album": album,
-            }
-        ]
-
-    except Exception as e:
-        print(f"Error generating fingerprint: {e}")
-        return None
-
-def get_file_format(file_path):
+def target_zone(anchor, points, width, height, t):
     """
-    Extract the file format from the file path.
+    Creates a target zone based on the given anchor point.
 
-    :param file_path: The path to the file
-    :return: The file format (e.g., 'wav', 'mp3')
+    :param anchor: The anchor point
+    :param points: List of points
+    :param width: Width of the target zone
+    :param height: Height of the target zone
+    :param t: Time offset of the target zone from the anchor
+    :return: Iterator over points in the target zone
     """
-    file_format = os.path.splitext(file_path)[1][1:]  # Extract the file extension and remove the dot
-    return file_format
+    x_min = anchor[1] + t
+    x_max = x_min + width
+    y_min = anchor[0] - (height * 0.5)
+    y_max = y_min + height
+
+    for point in points:
+        if point[0] < y_min or point[0] > y_max:
+            continue
+        if point[1] < x_min or point[1] > x_max:
+            continue
+        yield point
+
+
+def hash_points(points, filename):
+    """
+    Generates hashes from a list of peaks.
+
+    :param points: List of peaks
+    :param filename: Filename to generate a song ID
+    :return: List of hashes
+    """
+    hashes = []
+    song_id = uuid.uuid5(uuid.NAMESPACE_OID, filename).int
+    for anchor in points:
+        for target in target_zone(
+                anchor, points, settings.TARGET_T, settings.TARGET_F, settings.TARGET_START
+        ):
+            hashes.append((
+                hash_point_pair(anchor, target),  # The computed hash
+                anchor[1],  # Time offset
+                str(song_id)  # Song ID
+            ))
+    return hashes
+
+
+def fingerprint_file(filename):
+    """
+    Generates a fingerprint for a file.
+
+    :param filename: File path
+    :return: List of hashes
+    """
+    f, t, Sxx = file_to_spectrogram(filename)
+    peaks = find_peaks(Sxx)
+    peaks = idxs_to_tf_pairs(peaks, t, f)
+    return hash_points(peaks, filename)
