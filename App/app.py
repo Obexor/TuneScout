@@ -1,19 +1,13 @@
 import streamlit as st
 import os
-import subprocess
-import wave
-import numpy as np
-import tempfile  # Importieren Sie das Modul für temporäre Dateien
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
+from pipeline.hashing import generate_hashes
 from pipeline.audio_processing import record_audio
 from equalizer.features import equalizer_features
 from Databank.User_Management import UserManager
 import bcrypt
 from streamlit import session_state
-from pipeline.hashing import fingerprint_file
-from pipeline.audio_processing import convert_mp3_to_wav
-
 
 # Initialize the Streamlit application
 if "authenticated" not in session_state:
@@ -43,7 +37,6 @@ class StreamlitApp:
         self.db_manager = ADC(aws_access_key_id, aws_secret_access_key, region_name, table_name)
         self.s3_manager = S3Manager(aws_access_key_id, aws_secret_access_key, region_name, bucket_name)
         self.user_manager = UserManager(aws_access_key_id, aws_secret_access_key, region_name, user_table)
-
 
     def authenticate_user(self):
         st.header("Login")
@@ -81,94 +74,78 @@ class StreamlitApp:
     def upload_song_with_metadata(self):
         st.header("Upload Song with Metadata")
 
-        # Step 1: Upload file
+        # Step 1: Upload File and get filetype
         uploaded_file = st.file_uploader("Upload a song (MP3/WAV)", type=["mp3", "wav"])
 
-        # Check if a file has been uploaded
-        if not uploaded_file:
-            st.error("Please upload a valid MP3 or WAV file.")
-            return
-
-        # Check if the uploaded object is valid
-        if not hasattr(uploaded_file, "getbuffer"):
-            st.error("Invalid file format or upload failed. Please try again.")
-            return
-
-        # Step 2: Capture metadata
-        artist = st.text_input("Artist", "Unknown")
+        # Step 2: Metadata Input
+        artist = st.text_input("Artist", "Unknown")  # Default value as "Unknown"
         title = st.text_input("Title", "Unknown Title")
         album = st.text_input("Album", "Unknown Album")
 
-        # Start processing after upload
+        # Confirm upload
         if st.button("Upload Song"):
+            if not uploaded_file:
+                st.error("Please upload a valid MP3 or WAV file.")
+                return
+
             try:
-                # Prepare metadata
+                # Step 3: Assign Metadata
                 song_data = {
                     "artist": artist.strip() or "Unknown",
                     "title": title.strip() or "Unknown Title",
                     "album": album.strip() or "Unknown Album",
                     "s3_key": f"songs/{uploaded_file.name}"
                 }
+                st.info(
+                    f"Processing: Title='{song_data['title']}', Artist='{song_data['artist']}', Album='{song_data['album']}'")
 
-                # Save temporary file
-                with tempfile.NamedTemporaryFile(delete=False,
-                                                 suffix=os.path.splitext(uploaded_file.name)[1]) as temp_file:
-                    temp_file_path = temp_file.name
-                    temp_file.write(uploaded_file.getbuffer())
+                # Step 4: Generate Song ID
+                song_id = self.db_manager.get_latest_song_id() + 1
 
-                # Check file format and convert to WAV if necessary
-                temp_output_path = tempfile.mktemp(suffix=".wav")
-                if uploaded_file.name.lower().endswith(".mp3"):
-                    st.info("Converting MP3 to WAV...")
-                    success = convert_mp3_to_wav(temp_file_path, temp_output_path)
-                    if not success:
-                        st.error("MP3 to WAV conversion failed. Please ensure ffmpeg is installed.")
-                        return
-                else:
-                    temp_output_path = temp_file_path  # Use directly if it's a WAV file
+                # Step 5: Generate Fingerprints
+                st.info("Generating fingerprints for the song...")
+                file_type = os.path.splitext(uploaded_file.name)[1][1:]
+                fingerprints = generate_hashes(
+                    uploaded_file,  # Input file
+                    file_type,
+                    song_id,  # Song ID
+                    song_data['artist'],  # Artist
+                    song_data['title'],  # Title
+                    song_data['album'], # Album
+                    song_data['s3_key']  # S3-Key
+                )
 
-                # Check if the file is mono
-                st.info("Checking if audio is mono...")
-                with wave.open(temp_output_path, "rb") as wav_file:
-                    channels = wav_file.getnchannels()
-                    if channels > 1:
-                        st.warning("The uploaded audio is stereo. Converting to mono...")
-                        # Convert stereo to mono
-                        frames = wav_file.readframes(wav_file.getnframes())
-                        samples = np.frombuffer(frames, dtype=np.int16).reshape((-1, channels))
-                        mono_samples = samples.mean(axis=1).astype(np.int16)
-
-                        # Save as mono WAV
-                        with wave.open(temp_output_path, "wb") as mono_file:
-                            mono_file.setnchannels(1)
-                            mono_file.setsampwidth(wav_file.getsampwidth())
-                            mono_file.setframerate(wav_file.getframerate())
-                            mono_file.writeframes(mono_samples.tobytes())
-
-                # Generate fingerprints
-                st.info("Generating fingerprints...")
-                fingerprints = fingerprint_file(temp_output_path)
                 if not fingerprints:
-                    st.error("Failed to generate fingerprints.")
+                    st.error("Fingerprint generation failed. Cannot proceed with uploading.")
                     return
-
-                # Check if a song with the same fingerprints already exists
-                st.info("Checking for existing matches...")
+                # Step 6: Check for Existing Song
+                st.info("Checking if the song already exists in the database...")
                 existing_match = self.db_manager.find_song_by_hashes(fingerprints)
+
                 if existing_match:
-                    st.warning("A similar song already exists in the database.")
-                    st.json(existing_match)
+                    st.warning(f"The song already exists in the database.")
+                    st.json(existing_match)  # Display metadata or match information
                     return
 
-                # Store metadata and fingerprints
-                st.info("Storing metadata and fingerprints...")
-                self.db_manager.store_song(song_data, fingerprints)
+                # Step 7: Store Metadata and Fingerprints in DynamoDB
+                st.info("Storing song metadata and fingerprints in the database...")
+                stored = self.db_manager.store_song(song_data, fingerprints)
 
-                # Upload song to Amazon S3
-                st.info("Uploading file to S3...")
-                self.s3_manager.upload_file(temp_output_path, song_data["s3_key"])
+                if not stored:
+                    st.error("Failed to store the song data in the database. Please try again.")
+                    return
 
-                # Successful processing
+                # Step 8: Upload Song File to S3
+                st.info("Uploading the song file to S3...")
+                # Save the uploaded file locally
+                with open(uploaded_file.name, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                # Upload to S3
+                self.s3_manager.upload_file(
+                    uploaded_file.name,
+                    f"songs/{uploaded_file.name}"  # Place files in the 'songs/' folder in S3
+                )
+
                 st.success(f"Successfully uploaded '{song_data['title']}' by '{song_data['artist']}'!")
 
             except Exception as e:
