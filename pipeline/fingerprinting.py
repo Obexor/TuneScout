@@ -99,22 +99,23 @@ def hash_points(points, filename):
 
     :param points: List of peak frequency-time points.
     :param filename: Path to the file (used for song ID generation).
-    :returns: A list of hashes in the form (hash, time offset, song_id).
+    :returns: A list of hashes in the form (hash (as str), time offset (as str), song_id (as str)).
     """
     hashes = []
-    song_id = uuid.uuid5(uuid.NAMESPACE_OID, filename).int  # Song ID as INT
+    song_id = str(uuid.uuid5(uuid.NAMESPACE_OID, filename).int)  # Song ID as STRING
 
     for anchor in points:
         for target in target_zone(
                 anchor, points, settings.TARGET_T, settings.TARGET_F, settings.TARGET_START
         ):
             hashes.append((
-                hash_point_pair(anchor, target),  # Computed hash
-                int(anchor[1]),  # Time offset as INT
-                song_id  # Song ID as INT (not a string)
+                str(hash_point_pair(anchor, target)),  # Hash as STRING
+                str(int(anchor[1])),  # Time offset as STRING
+                song_id  # Song ID (already STRING)
             ))
 
     return hashes
+
 
 
 def fingerprint_file(filename):
