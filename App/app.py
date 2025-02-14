@@ -9,6 +9,7 @@ from Databank.User_Management import UserManager
 import bcrypt
 import tempfile
 from streamlit import session_state
+from pipeline.audioconverter import convert_to_wav
 
 
 # Initialize the Streamlit application
@@ -101,17 +102,27 @@ class StreamlitApp:
                 st.info(
                     f"Processing: Title='{song_data['title']}', Artist='{song_data['artist']}', Album='{song_data['album']}'")
 
+
                 # Step 4: Generate Song ID
                 song_id = self.db_manager.get_latest_song_id() + 1
+
 
                 # Step 5: Generate Fingerprints
                 st.info("Generating fingerprints for the song...")
                 file_type = os.path.splitext(uploaded_file.name)[1][1:]
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
+                # Save the uploaded file as a temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as temp:
                     temp.write(uploaded_file.read())
-                    temp_path = temp.name
+                    input_path = temp.name
 
-                fingerprints = fingerprint_file(temp_path)
+                # Ensure the output path is different from the input path
+                output_path = input_path.replace("." + input_path.split('.')[-1], "_converted.wav")
+
+                # Convert MP3 (or other formats) to WAV
+                convert_to_wav(input_path, output_path)
+
+                # Generate fingerprints from the converted WAV file
+                fingerprints = fingerprint_file(output_path)
 
                 if not fingerprints:
                     st.error("Fingerprint generation failed. Cannot proceed with uploading.")
