@@ -2,7 +2,7 @@ import streamlit as st
 import os
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
-from pipeline.fingerprinting import fingerprint_file, fingerprint_audio
+from pipeline.fingerprinting import fingerprint_file, fingerprint_audio_stream
 from pipeline.record import record_audio
 from equalizer.features import equalizer_features
 from Databank.User_Management import UserManager
@@ -192,16 +192,16 @@ class StreamlitApp:
         st.header("Compare Recorded Song")
         if st.button("Record and Compare"):
             try:
-                # 1. Aufnahme als NumPy-Daten
+                # 1. Record audio as NumPy data
                 recorded_audio_data = record_audio()
 
-                # 2. Fingerabdrücke mit fingerprint_audio erzeugen
-                compare_hashes = fingerprint_audio(recorded_audio_data)
+                # 2. Generate fingerprints using fingerprint_audio_stream
+                compare_hashes = fingerprint_audio_stream(recorded_audio_data)
 
-                # 3. Hashes mit Datenbank vergleichen
+                # 3. Compare hashes with the database
                 match = self.db_manager.find_song_by_hashes(compare_hashes)
 
-                # 4. Ergebnis anzeigen
+                # 4. Display the result
                 if match:
                     st.success("Match found!")
                     title = match.get('Title', 'Unknown Title')
@@ -214,7 +214,6 @@ class StreamlitApp:
                     st.warning("No match found.")
             except Exception as e:
                 st.error(f"Error recording and comparing audio: {e}")
-
 
     def stream_uploaded_song(self):
         st.header("Stream Uploaded Songs")
