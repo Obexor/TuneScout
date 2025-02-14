@@ -2,13 +2,14 @@ import streamlit as st
 import os
 from Databank.Amazon_DynamoDB import AmazonDBConnectivity as ADC
 from Databank.Amazon_S3 import S3Manager
-from pipeline.fingerprinting import fingerprint_file as generate_hashes
-from pipeline.record import record_audio_and_save as record_audio
+from pipeline.fingerprinting import fingerprint_file, fingerprint_audio
+from pipeline.record import record_audio
 from equalizer.features import equalizer_features
 from Databank.User_Management import UserManager
 import bcrypt
+import tempfile
 from streamlit import session_state
-from pipeline.audio_processing import convert_to_wav, ensure_mono
+
 
 # Initialize the Streamlit application
 if "authenticated" not in session_state:
@@ -106,20 +107,11 @@ class StreamlitApp:
                 # Step 5: Generate Fingerprints
                 st.info("Generating fingerprints for the song...")
                 file_type = os.path.splitext(uploaded_file.name)[1][1:]
-                # Lokales Speichern der hochgeladenen Datei
-                temp_filename = f"{song_id}_{uploaded_file.name}"
-                with open(temp_filename, "wb") as temp_file:
-                    temp_file.write(uploaded_file.getbuffer())
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
+                    temp.write(uploaded_file.read())
+                    temp_path = temp.name
 
-                # Konvertiere die Datei zuerst in WAV (falls erforderlich)
-                converted_filename = f"converted_{song_id}_{uploaded_file.name.split('.')[0]}.wav"
-                convert_to_wav(temp_filename, converted_filename)
-
-                # Datei in Mono konvertieren
-                ensure_mono(converted_filename)
-
-                # Fingerprints generieren
-                fingerprints = generate_hashes(converted_filename)
+                fingerprints = fingerprint_file(temp_path)
 
                 if not fingerprints:
                     st.error("Fingerprint generation failed. Cannot proceed with uploading.")
@@ -165,16 +157,11 @@ class StreamlitApp:
                 try:
                     song_id = self.db_manager.get_latest_song_id() + 1
                     file_type = os.path.splitext(compare_file.name)[1][1:]
-                    temp_filename = f"compare_{song_id}_{compare_file.name}"
-                    with open(temp_filename, "wb") as temp_file:
-                        temp_file.write(compare_file.getbuffer())
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
+                        temp.write(compare_file.read())
+                        temp_path = temp.name
 
-                    # Sicherstellen, dass die Datei Mono ist
-                    ensure_mono(temp_filename)
-
-                    # Fingerprints generieren
-                    compare_hashes = generate_hashes(temp_filename)
-
+                    compare_hashes = fingerprint_file(temp_path)
                     match = self.db_manager.find_song_by_hashes(compare_hashes)
                     if match:
                         st.success("Match found!")
@@ -190,32 +177,30 @@ class StreamlitApp:
                 except Exception as e:
                     st.error(f"Error comparing song: {e}")
 
-
     def compare_recorded_song(self):
         st.header("Compare Recorded Song")
         if st.button("Record and Compare"):
             try:
-                record_audio("recorded_compare.wav")
-                with open("recorded_compare.wav", "rb") as recorded_file:
-                    file_type = os.path.splitext("recorded_compare.wav")[1][1:]
+                # 1. Aufnahme als NumPy-Daten
+                recorded_audio_data = record_audio()
 
-                    # Sicherstellen, dass die Datei Mono ist
-                    ensure_mono("recorded_compare.wav")
+                # 2. Fingerabdrücke mit fingerprint_audio erzeugen
+                compare_hashes = fingerprint_audio(recorded_audio_data)
 
-                    # Fingerprints generieren
-                    compare_hashes = generate_hashes("recorded_compare.wav")
+                # 3. Hashes mit Datenbank vergleichen
+                match = self.db_manager.find_song_by_hashes(compare_hashes)
 
-                    match = self.db_manager.find_song_by_hashes(compare_hashes)
-                    if match:
-                        st.success("Match found!")
-                        title = match.get('Title', 'Unknown Title')
-                        artist = match.get('Artist', 'Unknown Artist')
-                        album = match.get('Album', 'Unknown Album')
-                        st.subheader(f"**Title**: {title}")
-                        st.write(f"**Artist**: {artist}")
-                        st.write(f"**Album**: {album}")
-                    else:
-                        st.warning("No match found.")
+                # 4. Ergebnis anzeigen
+                if match:
+                    st.success("Match found!")
+                    title = match.get('Title', 'Unknown Title')
+                    artist = match.get('Artist', 'Unknown Artist')
+                    album = match.get('Album', 'Unknown Album')
+                    st.subheader(f"**Title**: {title}")
+                    st.write(f"**Artist**: {artist}")
+                    st.write(f"**Album**: {album}")
+                else:
+                    st.warning("No match found.")
             except Exception as e:
                 st.error(f"Error recording and comparing audio: {e}")
 

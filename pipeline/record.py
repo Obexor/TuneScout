@@ -1,159 +1,145 @@
-# record.py
-
 import os
 import wave
 import threading
 import pyaudio
 import numpy as np
-from pipeline import settings
+
+CHUNK = 1024
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+RATE = 44100
+RECORD_SECONDS = 10
+SAVE_DIRECTORY = "test/"
 
 
-class AudioRecorder:
-    """Class for recording audio and saving it as a WAV file."""
+def record_audio(filename=None):
+    """
+    Records 10 seconds of audio and optionally saves it to a file.
 
-    def __init__(self, channels=1, rate=settings.SAMPLE_RATE, chunk_size=settings.CHUNK):
-        self.channels = channels
-        self.rate = rate
-        self.chunk_size = chunk_size
-        self.audio = pyaudio.PyAudio()
+    :param filename: The path where the audio will be saved (optional).
+    :returns: The audio stream as a NumPy array with parameters defined in this module.
+    """
+    p = pyaudio.PyAudio()
 
-    def record(self, duration, filename=None):
-        """
-        Records audio for the specified duration and optionally saves it as a file.
+    stream = p.open(format=FORMAT,
+                    channels=CHANNELS,
+                    rate=RATE,
+                    input=True,
+                    frames_per_buffer=CHUNK)
 
-        :param duration: Recording duration in seconds.
-        :param filename: Name of the file to save the WAV data (optional).
-        :return: Numpy array with the recorded audio data.
-        """
-        stream = self.audio.open(format=pyaudio.paInt16,
-                                 channels=self.channels,
-                                 rate=self.rate,
-                                 input=True,
-                                 frames_per_buffer=self.chunk_size)
+    print("* Recording started...")
 
-        print("* Recording started")
+    frames = []
+    write_frames = []
 
-        frames = []
-        raw_frames = []
-
-        for _ in range(0, int(self.rate / self.chunk_size * duration)):
-            data = stream.read(self.chunk_size, exception_on_overflow=False)
-            frames.append(np.frombuffer(data, dtype=np.int16))
-            raw_frames.append(data)
-
-        print("* Recording finished")
-
-        stream.stop_stream()
-        stream.close()
-
+    for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+        data = stream.read(CHUNK)
+        frames.append(np.frombuffer(data, dtype=np.int16))
         if filename:
-            self._save_to_wav(filename, raw_frames)
+            write_frames.append(data)
 
-        return np.hstack(frames)
+    print("* Recording finished.")
 
-    def _save_to_wav(self, filename, frames):
-        """
-        Saves the recorded audio frames as a WAV file.
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
 
-        :param filename: Name of the WAV file.
-        :param frames: List of frames (byte data).
-        """
+    if filename:
         with wave.open(filename, 'wb') as wf:
-            wf.setnchannels(self.channels)
-            wf.setsampwidth(self.audio.get_sample_size(pyaudio.paInt16))
-            wf.setframerate(self.rate)
-            wf.writeframes(b''.join(frames))
-        print(f"File saved: {filename}")
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(p.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(b''.join(write_frames))
 
-    def terminate(self):
-        """Terminates the PyAudio instance."""
-        self.audio.terminate()
+    return np.hstack(frames)
 
 
 class RecordThread(threading.Thread):
-    """Thread for continuous recording in overlapping segments."""
+    """
+    A thread that continuously records audio and saves files at regular intervals.
+    """
 
     def __init__(self, base_filename, piece_len=10, spacing=5):
-        """
-        Initializes a recording thread.
-
-        :param base_filename: Base name of the files for the segments.
-        :param piece_len: Length of each segment in seconds.
-        :param spacing: Overlap time between segments in seconds.
-        """
         super().__init__()
         self.stop_request = threading.Event()
-        self.piece_len = piece_len
-        self.spacing = spacing
-        self.base_filename = base_filename
-        self.audio_recorder = AudioRecorder()
         self.frames = []
-        self.file_num = self._get_file_num()
+        self.audio = pyaudio.PyAudio()
+        self.chunks_per_write = int((RATE / CHUNK) * piece_len)
+        self.chunks_to_delete = int((RATE / CHUNK) * spacing)
+        self.stream = self.audio.open(format=FORMAT,
+                                      channels=CHANNELS,
+                                      rate=RATE,
+                                      input=True,
+                                      frames_per_buffer=CHUNK)
+        self.base_filename = base_filename
+        self.file_num = self.get_file_num()
 
-    def _get_file_num(self):
-        """Determines the next available file number."""
+    def get_file_num(self):
+        """
+        Determines the next available file number based on existing files.
+        """
         file_num = 1
-        if not os.path.exists(settings.SAVE_DIRECTORY):
-            os.makedirs(settings.SAVE_DIRECTORY)
+        if not os.path.exists(SAVE_DIRECTORY):
+            os.makedirs(SAVE_DIRECTORY)
 
-        for f in os.listdir(settings.SAVE_DIRECTORY):
+        for f in os.listdir(SAVE_DIRECTORY):
             if self.base_filename not in f:
                 continue
-            try:
-                num = int(f.split(".")[0][len(self.base_filename):])
-                if num >= file_num:
-                    file_num = num + 1
-            except ValueError:
-                continue
+            num = int(f.split(".")[0][len(self.base_filename):])
+            if num >= file_num:
+                file_num = num + 1
         return file_num
 
+    def write_piece(self):
+        """
+        Saves the current recording to a file.
+        """
+        filename = os.path.join(SAVE_DIRECTORY, f"{self.base_filename}{self.file_num}.wav")
+        frames_to_write = self.frames[:self.chunks_per_write]
+
+        with wave.open(filename, 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(self.audio.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(b''.join(frames_to_write))
+
+        self.frames = self.frames[self.chunks_to_delete:]
+        self.file_num += 1
+
     def run(self):
-        """Starts the recording in a separate thread."""
-        while not self.stop_request.is_set():
-            segment_filename = os.path.join(settings.SAVE_DIRECTORY, f"{self.base_filename}{self.file_num}.wav")
-            print(f"Recording started: Segment {self.file_num}")
+        """
+        Starts the recording in the background.
+        """
+        while not self.stop_request.isSet():
+            data = self.stream.read(CHUNK)
+            self.frames.append(data)
+            if len(self.frames) > self.chunks_per_write:
+                self.write_piece()
 
-            audio_data = self.audio_recorder.record(self.piece_len)
-            self.frames.append(audio_data)
-            self.audio_recorder._save_to_wav(segment_filename, [audio_data.tobytes()])
-
-            self.file_num += 1
+        self.stream.stop_stream()
+        self.stream.close()
+        self.audio.terminate()
 
     def join(self, timeout=None):
-        """Stops the recording thread."""
+        """
+        Stops the thread.
+        """
         self.stop_request.set()
-        self.audio_recorder.terminate()
         super().join(timeout)
 
 
 def gen_many_tests(base_filename, spacing=5, piece_len=10):
     """
-    Continuously creates overlapping test segments and saves them.
+    Continuously records overlapping audio files and saves them.
 
-    :param base_filename: Base name of the files (without extension).
-    :param spacing: Overlap time in seconds between recording starts.
-    :param piece_len: Length of each recorded segment in seconds.
+    :param base_filename: Base filename without extension.
+    :param spacing: Time in seconds between recordings.
+    :param piece_len: Duration of each recording in seconds.
     """
-    rec_thread = RecordThread(base_filename, piece_len=piece_len, spacing=spacing)
+    if not os.path.exists(SAVE_DIRECTORY):
+        os.makedirs(SAVE_DIRECTORY)
+
+    rec_thread = RecordThread(base_filename, spacing=spacing, piece_len=piece_len)
     rec_thread.start()
-    input("Press <Enter> to stop recording.")
+    input("Press <Enter> to stop recording...")
     rec_thread.join()
-
-
-def record_audio_and_save(temp_file_name, duration=5):
-    """
-    Records audio for a specific duration and saves it as a WAV file.
-
-    :param temp_file_name: Name of the file (without extension).
-    :param duration: Recording duration in seconds.
-    :return: Path to the saved WAV file.
-    """
-    try:
-        recorder = AudioRecorder()
-        temp_file_path = f"{temp_file_name}.wav"
-        recorder.record(duration, filename=temp_file_path)
-        recorder.terminate()
-        print(f"Audio recorded and saved as: {temp_file_path}")
-        return temp_file_path
-    except Exception as e:
-        raise RuntimeError(f"Error during audio recording: {str(e)}")
