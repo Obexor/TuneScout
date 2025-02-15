@@ -4,7 +4,7 @@
 SAMPLE_RATE = 44100
 
 # FFT window size in seconds (affects spectrogram resolution)
-FFT_WINDOW_SIZE = 0.2  # 200ms
+FFT_WINDOW_SIZE = 0.2  # 20 ms
 
 # Size of the box for peak detection (frequency × time box)
 PEAK_BOX_SIZE = 30

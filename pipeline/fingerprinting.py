@@ -12,11 +12,16 @@ from pipeline import settings  # Global settings for processing
 
 def compute_spectrogram(audio):
     """
-    Computes a spectrogram based on global settings.
-    :param audio: NumPy array of audio data.
-    :returns: Frequencies (f), timestamps (t), spectrogram data (Sxx)
-    """
+       Computes a spectrogram from audio data using global settings.
+       :param audio: NumPy array of audio data (1D array).
+       :returns: Frequencies (f), timestamps (t), spectrogram data (Sxx)
+       """
     nperseg = int(settings.SAMPLE_RATE * settings.FFT_WINDOW_SIZE)
+    nperseg = min(len(audio), nperseg)  # Ensure nperseg does not exceed audio length
+
+    # Debugging
+    print(f"Audio length: {len(audio)}, nperseg: {nperseg}")
+
     return spectrogram(audio, settings.SAMPLE_RATE, nperseg=nperseg)
 
 
@@ -180,5 +185,7 @@ def fingerprint_audio_stream(frames):
     hashes = generate_hashes(peak_points, "streamed_audio")
 
     print(f"\n[✓] Fingerprinting for audio stream completed.")
-    print(f"    - Total hashes: {len(hashes)}\n")
+    print(f"    - Total hashes generated: {len(hashes)}")
+    print(f"    - Example hashes: {hashes[:5]} ... (showing 5 of {len(hashes)})\n")  # Print first 5 fingerprints
+
     return hashes
