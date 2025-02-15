@@ -20,23 +20,23 @@ def equalizer_features():
 
         try:
             with wave.open(uploaded_file, "rb") as wav_file:
-                # Extrahiere grundlegende Parameter und Frames
+                # Extract basic parameters and frames
                 params = wav_file.getparams()
                 raw_data = wav_file.readframes(params.nframes)
 
-                # Rohdaten in int16 konvertieren
+                # Convert raw data into int16
                 audio_signal = np.frombuffer(raw_data, dtype=np.int16)
 
-                # Wenn mehrere Kanäle vorhanden sind, auf Mono reduzieren
+                # If multiple channels exist, reduce to mono
                 if params.nchannels > 1:
                     audio_signal = audio_signal[::params.nchannels]
 
-                # Samplingrate und Signal-Dauer korrekt berechnen
+                # Correctly compute the sampling rate and signal duration
                 frame_rate = params.framerate
                 duration = params.nframes / float(frame_rate)
                 time = np.linspace(0, duration, len(audio_signal))
 
-                # Audio-Signal bearbeiten (mit einfachen Verstärkungen für Visualisierung)
+                # Modify audio signal (apply basic amplifications for visualization)
                 equalized_signal = (
                         audio_signal * (1 + bass_gain / 100) +
                         audio_signal * (1 + midrange_gain / 100) +
@@ -54,13 +54,13 @@ def equalizer_features():
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
                     with wave.open(temp_file.name, "wb") as out_wav:
-                        # Ausgangssignal in WAV-Datei schreiben
+                        # Write the output signal into WAV format
                         out_wav.setnchannels(1)  # Mono
-                        out_wav.setsampwidth(2)  # 16-bit Tiefe
+                        out_wav.setsampwidth(2)  # 16-bit depth
                         out_wav.setframerate(frame_rate)
                         out_wav.writeframes(equalized_signal.astype(np.int16).tobytes())
 
-                    # Gewähltes Audio anhören und herunterladen
+                    # Listen to and download the processed audio
                     st.audio(temp_file.name, format="audio/wav")
                     st.download_button(
                         label="Download Equalized Audio",
