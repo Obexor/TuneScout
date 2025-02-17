@@ -28,16 +28,17 @@ class StreamlitApp:
     recorded songs against a database, and streaming available songs. It relies on an
     Amazon DynamoDB-based database manager (ADC) and an Amazon S3 manager for storage/streaming.
 
-    :ivar db_manager: Manages database operations, including storing/retrieving song metadata
-        and fingerprint data in DynamoDB.
+    :ivar db_manager: Manages database operations, including storing/retrieving song metadata and
+        fingerprints in separate tables, SongsFingerprints and Hashes, in DynamoDB.
     :type db_manager: ADC
     :ivar bucket_name: Name of the S3 bucket used for song file storage.
     :type bucket_name: str
     :ivar s3_manager: Manages S3 operations, such as uploading and streaming song files.
     :type s3_manager: S3Manager
     """
-    def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, table_name, bucket_name, user_table):
-        self.db_manager = ADC(aws_access_key_id, aws_secret_access_key, region_name, table_name)
+    def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, songs_table_name, hashes_table_name, bucket_name, user_table):
+        self.db_manager_data = ADC(aws_access_key_id, aws_secret_access_key, region_name, songs_table_name)
+        self.db_manager_fingerprints = ADC(aws_access_key_id, aws_secret_access_key, region_name, hashes_table_name)
         self.s3_manager = S3Manager(aws_access_key_id, aws_secret_access_key, region_name, bucket_name)
         self.user_manager = UserManager(aws_access_key_id, aws_secret_access_key, region_name, user_table)
 
@@ -104,8 +105,7 @@ class StreamlitApp:
 
 
                 # Step 4: Generate Song ID
-                song_id = self.db_manager.get_latest_song_id() + 1
-
+                song_id = self.db_manager_data.get_latest_song_id() + 1
 
                 # Step 5: Generate Fingerprints
                 st.info("Generating fingerprints for the song...")
@@ -127,21 +127,32 @@ class StreamlitApp:
                 if not fingerprints:
                     st.error("Fingerprint generation failed. Cannot proceed with uploading.")
                     return
-                # Step 6: Check for Existing Song
-                st.info("Checking if the song already exists in the database...")
-                existing_match = self.db_manager.find_song_by_hashes(fingerprints)
 
-                if existing_match:
-                    st.warning(f"The song already exists in the database.")
-                    st.json(existing_match)  # Display metadata or match information
+                # Step 6: Check for Existing Song
+                #st.info("Checking if the song already exists in the database...")
+                #existing_match = self.db_manager_fingerprints.find_song_by_hashes(fingerprints)
+
+                #if existing_match:
+                #    st.warning(f"The song already exists in the database.")
+                #    st.json(existing_match)  # Display metadata or match information
+                #    return
+
+                # Step 7: Store Metadata and Fingerprints in Separate Tables in DynamoDB
+                st.info("Storing song metadata in the SongsFingerprints table...")
+                stored_metadata = self.db_manager_data.store_metadata_in_songs_table(song_id, song_data)
+                if not stored_metadata:
+                    st.error("Failed to store the song metadata in the SongsFingerprints table. Please try again.")
                     return
 
-                # Step 7: Store Metadata and Fingerprints in DynamoDB
-                st.info("Storing song metadata and fingerprints in the database...")
-                stored = self.db_manager.store_song(song_data, fingerprints)
+                st.info("Storing song fingerprints in the Hashes table...")
+                stored_hashes = self.db_manager_fingerprints.store_fingerprints_in_hashes_table(song_id, fingerprints)
+                if not stored_hashes:
+                    st.error("Failed to store the fingerprints in the Hashes table. Please try again.")
+                    return
 
-                if not stored:
-                    st.error("Failed to store the song data in the database. Please try again.")
+                stored_metadata = self.db_manager_fingerprints.store_metadata_in_songs_table(song_id, song_data)
+                if not stored_metadata:
+                    st.error("Failed to store the song metadata in the SongsFingerprints table. Please try again.")
                     return
 
                 # Step 8: Upload Song File to S3

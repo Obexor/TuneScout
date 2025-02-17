@@ -156,4 +156,40 @@ class AmazonDBConnectivity:
             return response.get("Items", [])
         except Exception as e:
             print(f"Failed to retrieve records: {str(e)}")
-            return []
+
+    def store_metadata_in_songs_table(self, song_id, song_data):
+        """
+        Stores song metadata in the SongsFingerprints table.
+
+        :param song_id: Unique Song ID.
+        :param song_data: Dictionary containing song metadata (artist, title, album, etc.).
+        """
+        try:
+            table = self.dynamodb_resource.Table('SongsFingerprints')
+            song_data["SongID"] = str(song_id)
+            table.put_item(Item=song_data)
+            print("Metadata stored successfully in SongsFingerprints table.")
+        except (BotoCoreError, ClientError) as e:
+            print("Failed to store metadata in SongsFingerprints table:", e)
+
+    def store_fingerprints_in_hashes_table(self, song_id, fingerprints):
+        """
+        Stores song fingerprints in the Hashes table.
+
+        :param song_id: Unique Song ID associated with the fingerprints.
+        :param fingerprints: List of dictionaries, each containing a hash and its offset.
+        """
+        try:
+
+            table = self.dynamodb_resource.Table('Hashes')
+            for fingerprint in fingerprints:
+                fingerprint_data = {
+                    "Hash": fingerprint[0],
+                    "Offset": fingerprint[1],
+                    "SongID": str(song_id)
+                }
+                table.put_item(Item=fingerprint_data)
+            print("Fingerprints stored successfully in Hashes table.")
+        except (BotoCoreError, ClientError) as e:
+            print("Failed to store fingerprints in Hashes table:", e)
+

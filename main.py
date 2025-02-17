@@ -5,11 +5,12 @@ from dynaconf import settings
 aws_access_key = settings.AWS_ACCESS_KEY_ID
 aws_secret_key = settings.AWS_SECRET_ACCESS_KEY
 aws_region = settings.AWS_REGION
-table_name = settings.AWS_TABLE_NAME
+table_name_fingerprints = settings.AWS_TABLE_NAME_HASHES
+table_name_data = settings.AWS_TABLE_NAME_SONGDATA
 bucket_name = settings.AWS_BUCKET_NAME
 user_table_name = settings.AWS_USER_TABLE_NAME
 
 # Initialize and run the Streamlit app
-app = StreamlitApp(aws_access_key, aws_secret_key, aws_region, table_name, bucket_name, user_table_name)
+app = StreamlitApp(aws_access_key, aws_secret_key, aws_region, table_name_fingerprints, table_name_data, bucket_name, user_table_name)
 app.run()
 
