@@ -212,7 +212,7 @@ class StreamlitApp:
                         st.error("Fingerprint generation failed. Cannot proceed with uploading.")
                         return
 
-                    print(fingerprints)
+                    st.info("Check Databse for match...")
                     match = self.db_manager_fingerprints.find_song_by_hashes(fingerprints)
 
                     if match:
@@ -255,17 +255,33 @@ class StreamlitApp:
                 compare_hashes = fingerprint_audio_stream(recorded_audio_data)
 
                 # 3. Compare hashes with the database
-                match = self.db_manager.find_song_by_hashes(compare_hashes)
+                match = self.db_manager_fingerprints.find_song_by_hashes(compare_hashes)
 
                 # 4. Display the result
                 if match:
                     st.success("Match found!")
-                    title = match.get('Title', 'Unknown Title')
-                    artist = match.get('Artist', 'Unknown Artist')
-                    album = match.get('Album', 'Unknown Album')
-                    st.subheader(f"**Title**: {title}")
-                    st.write(f"**Artist**: {artist}")
-                    st.write(f"**Album**: {album}")
+
+                    # Compare Song ID from the match and fetch metadata
+                    song_id = match.get('SongID', None)  # Extract SongID from the matched result
+                    if not song_id:
+                        st.error("No SongID found in the match data. Unable to fetch metadata.")
+                    else:
+                        # Fetch all metadata using the song_id
+                        metadata = next(
+                            (item for item in self.db_manager_data.fetch_item() if item.get('SongID') == song_id),
+                            None
+                        )
+
+                        if metadata:
+                            # If metadata found, display the details
+                            title = metadata.get('title', 'Unknown Title')
+                            artist = metadata.get('artist', 'Unknown Artist')
+                            album = metadata.get('album', 'Unknown Album')
+                            st.subheader(f"**Title**: {title}")
+                            st.write(f"**Artist**: {artist}")
+                            st.write(f"**Album**: {album}")
+                        else:
+                            st.error(f"Metadata not found for SongID: {song_id}")
                 else:
                     st.warning("No match found.")
             except Exception as e:

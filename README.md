@@ -7,24 +7,24 @@ This project demonstrates the integration of cloud services with a user-friendly
 ---
 
 ## 🚀 Features
+1.  **User Authentication**: Secure login and signup with encrypted user credentials.
+   2. **Song Upload**:
+      - Upload MP3/WAV audio files.
+      - Automatically generate audio fingerprints for deduplication.
+      - Input metadata (artist, title, and album) or use defaults.
 
-1. **Song Upload**:
-   - Upload MP3/WAV audio files.
-   - Automatically generate audio fingerprints for deduplication.
-   - Input metadata (artist, title, and album) or use defaults.
-
-2. **Duplicate Detection**:
+3.  **Duplicate Detection**:
    - Prevent duplicate entries by checking stored fingerprints in DynamoDB.
 
-3. **Stream Songs**:
+4.  **Stream Songs**:
    - List all uploaded songs.
    - Securely stream songs from AWS S3 using pre-signed URLs.
 
-4. **Audio Equalizer**:
+5.  **Audio Equalizer**:
    - Adjust audio frequencies to enhance playback.
    - Save and apply custom equalizer settings.
 
-5. **AWS Integration**:
+6.  **AWS Integration**:
    - **DynamoDB**: Store song metadata and fingerprints.
    - **S3**: Store audio files and generate pre-signed URLs for secure access.
 
@@ -79,21 +79,21 @@ This project demonstrates the integration of cloud services with a user-friendly
      export AWS_SECRET_ACCESS_KEY='your-secret-key'
      export AWS_REGION='your-region'
      export AWS_S3_BUCKET_NAME='your-bucket-name'
-     export DYNAMODB_TABLE_NAME='your-dynamodb-table-name'
-     ```
-   - OR using AWS CLI configuration:
-     ```bash
-     aws configure
+     export AWS_TABLE_NAME_SONGDATA='your-dynamodb-song-data-table-name'
+     export AWS_TABLE_NAME_HASHES='your-dynamodb-hashes-table-name'
+     export AWS_USER_TABLE_NAME='your-dynamodb-user-table-name'
      ```
 
 4. **Set Up Environment Variables**
    Create a `.env` file with the following structure:
    ```
-   AWS_ACCESS_KEY_ID=your-access-key
-   AWS_SECRET_ACCESS_KEY=your-secret-key
-   AWS_REGION=your-region
-   AWS_S3_BUCKET_NAME=your-bucket-name
-   DYNAMODB_TABLE_NAME=your-dynamodb-table-name
+    AWS_ACCESS_KEY_ID='your-access-key'
+    AWS_SECRET_ACCESS_KEY='your-secret-key'
+    AWS_REGION='your-region'
+    AWS_S3_BUCKET_NAME='your-bucket-name'
+    AWS_TABLE_NAME_SONGDATA='your-dynamodb-song-data-table-name'
+    AWS_TABLE_NAME_HASHES='your-dynamodb-hashes-table-name'
+    AWS_USER_TABLE_NAME='your-dynamodb-user-table-name'
    ```
 
 5. **Run the Application**:
@@ -115,6 +115,8 @@ This project demonstrates the integration of cloud services with a user-friendly
 ### 2. **Set Up a DynamoDB Table**
    - Open the DynamoDB service in AWS Console and create a new table.
    - Define a primary key as `song_id` (Number) or any field you'd like to use.
+   - Define a new table with a primary key as `hash` (String) for storing audio fingerprints.
+   - Define a new table with a primary key as `username` (String) for storing user credentials.
 
 ### 3. **IAM User Permissions**
    Ensure your IAM user/role has permissions for:
@@ -127,8 +129,35 @@ This project demonstrates the integration of cloud services with a user-friendly
 
 ## ⚙️ Project Structure
 
+### Overall Workflow:
+1. **Upload**: The user uploads an audio file or records using a microphone.
+2. **Preprocessing**:
+   - Convert files to WAV format.
+   - Generate audio fingerprints for comparison.
+3. **Database Operations**:
+   - Store metadata in DynamoDB.
+   - Save fingerprints separately in a DynamoDB `Hashes` table.
+   - Store raw audio files in an S3 bucket.
+4. **Recognition**:
+   - Compare uploaded or recorded audio against the database.
+   - Match using fingerprint hashes stored in DynamoDB.
+5. **Streaming**:
+   - Securely stream audio files stored in S3 to the user.
 
 ---
+
+## Technology Stack
+
+- **Frontend**: Streamlit framework for the user interface.
+- **Backend**: Python, using the following libraries:
+  - `boto3`: AWS SDK for Python to interact with DynamoDB and S3.
+  - `numpy`, `scipy`, `pandas`: For audio processing and manipulation.
+  - `Flask`, `requests`: Supporting the application backend logic.
+- **Database**: AWS DynamoDB for song metadata and fingerprint storage.
+- **Storage**: AWS S3 for song file storage.
+
+---
+
 
 ## 🔑 Key Functionalities
 

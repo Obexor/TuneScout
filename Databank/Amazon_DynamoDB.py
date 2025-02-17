@@ -144,6 +144,7 @@ class AmazonDBConnectivity:
         :return: Filtered item if a match is found; otherwise, None.
         """
         try:
+            match_count = 0  # Counter for hash matches
             for hash_item in hashes:
                 # If hash_item is a tuple, extract the values
                 if isinstance(hash_item, tuple):
@@ -161,9 +162,12 @@ class AmazonDBConnectivity:
                     for item in result:
                         # Compare the hash (item being checked is always a dictionary)
                         if item.get("Hash") == hash_value:
-                            # Remove unwanted keys before returning match
-                            filtered_item = {k: v for k, v in item.items() if k not in ["s3_key", "Hash"]}
-                            return filtered_item
+                            match_count += 1
+                            # If 10 matches are found, return the first matched item
+                            if match_count == 10:
+                                # Remove unwanted keys before returning match
+                                filtered_item = {k: v for k, v in item.items() if k not in ["s3_key", "Hash"]}
+                                return filtered_item
             return None
         except ClientError as e:
             print(f"Failed to find song by hashes: {e.response['Error']['Message']}")
