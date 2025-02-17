@@ -129,31 +129,44 @@ class StreamlitApp:
                     return
 
                 # Step 6: Check for Existing Song
-                #st.info("Checking if the song already exists in the database...")
-                #existing_match = self.db_manager_fingerprints.find_song_by_hashes(fingerprints)
+                st.info("Checking if the song already exists in the database...")
+                existing_match = self.db_manager_fingerprints.find_song_by_hashes(fingerprints)
 
-                #if existing_match:
-                #    st.warning(f"The song already exists in the database.")
-                #    st.json(existing_match)  # Display metadata or match information
-                #    return
+                if existing_match:
+                    st.warning(f"The song already exists in the database.")
+                    # Compare Song ID from the match and fetch metadata
+                    song_id = existing_match.get('SongID', None)  # Extract SongID from the matched result
+                    if not song_id:
+                        st.error("No SongID found in the match data. Unable to fetch metadata.")
+                    else:
+                        # Fetch all metadata using the song_id
+                        metadata = next(
+                            (item for item in self.db_manager_data.fetch_item() if item.get('SongID') == song_id),
+                            None
+                        )
+
+                        if metadata:
+                            # If metadata found, display the details
+                            title = metadata.get('title', 'Unknown Title')
+                            artist = metadata.get('artist', 'Unknown Artist')
+                            album = metadata.get('album', 'Unknown Album')
+                            st.subheader(f"**Title**: {title}")
+                            st.write(f"**Artist**: {artist}")
+                            st.write(f"**Album**: {album}")
+                        else:
+                            st.error(f"Metadata not found for SongID: {song_id}")  # Display metadata or match information
+                    return
 
                 # Step 7: Store Metadata and Fingerprints in Separate Tables in DynamoDB
                 st.info("Storing song metadata in the SongsFingerprints table...")
                 stored_metadata = self.db_manager_data.store_metadata_in_songs_table(song_id, song_data)
-                if not stored_metadata:
-                    st.error("Failed to store the song metadata in the SongsFingerprints table. Please try again.")
-                    return
+
 
                 st.info("Storing song fingerprints in the Hashes table...")
                 stored_hashes = self.db_manager_fingerprints.store_fingerprints_in_hashes_table(song_id, fingerprints)
-                if not stored_hashes:
-                    st.error("Failed to store the fingerprints in the Hashes table. Please try again.")
-                    return
-
-                stored_metadata = self.db_manager_fingerprints.store_metadata_in_songs_table(song_id, song_data)
-                if not stored_metadata:
-                    st.error("Failed to store the song metadata in the SongsFingerprints table. Please try again.")
-                    return
+                #if not stored_hashes:
+                #    st.error("Failed to store the fingerprints in the Hashes table. Please try again.")
+                #    return
 
                 # Step 8: Upload Song File to S3
                 st.info("Uploading the song file to S3...")
@@ -177,23 +190,55 @@ class StreamlitApp:
         if compare_file:
             if st.button("Compare"):
                 try:
-                    song_id = self.db_manager.get_latest_song_id() + 1
+                    # Step 5: Generate Fingerprints
+                    st.info("Generating fingerprints for the song...")
                     file_type = os.path.splitext(compare_file.name)[1][1:]
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
+                    # Save the uploaded file as a temporary file
+                    with tempfile.NamedTemporaryFile(delete=False,
+                                                     suffix=f".{compare_file.name.split('.')[-1]}") as temp:
                         temp.write(compare_file.read())
-                        temp_path = temp.name
+                        input_path = temp.name
 
-                    compare_hashes = fingerprint_file(temp_path)
-                    match = self.db_manager.find_song_by_hashes(compare_hashes)
+                    # Ensure the output path is different from the input path
+                    output_path = input_path.replace("." + input_path.split('.')[-1], "_converted.wav")
+
+                    # Convert MP3 (or other formats) to WAV
+                    convert_to_wav(input_path, output_path)
+
+                    # Generate fingerprints from the converted WAV file
+                    fingerprints = fingerprint_file(output_path)
+
+                    if not fingerprints:
+                        st.error("Fingerprint generation failed. Cannot proceed with uploading.")
+                        return
+
+                    print(fingerprints)
+                    match = self.db_manager_fingerprints.find_song_by_hashes(fingerprints)
+
                     if match:
                         st.success("Match found!")
-                        title = match.get('Title', 'Unknown Title')
-                        artist = match.get('Artist', 'Unknown Artist')
-                        album = match.get('Album', 'Unknown Album')
-                        st.subheader(f"**Title**: {title}")
-                        st.write(f"**Artist**: {artist}")
-                        st.write(f"**Album**: {album}")
 
+                        # Compare Song ID from the match and fetch metadata
+                        song_id = match.get('SongID', None)  # Extract SongID from the matched result
+                        if not song_id:
+                            st.error("No SongID found in the match data. Unable to fetch metadata.")
+                        else:
+                            # Fetch all metadata using the song_id
+                            metadata = next(
+                                (item for item in self.db_manager_data.fetch_item() if item.get('SongID') == song_id),
+                                None
+                            )
+
+                            if metadata:
+                                # If metadata found, display the details
+                                title = metadata.get('title', 'Unknown Title')
+                                artist = metadata.get('artist', 'Unknown Artist')
+                                album = metadata.get('album', 'Unknown Album')
+                                st.subheader(f"**Title**: {title}")
+                                st.write(f"**Artist**: {artist}")
+                                st.write(f"**Album**: {album}")
+                            else:
+                                st.error(f"Metadata not found for SongID: {song_id}")
                     else:
                         st.warning("No match found.")
                 except Exception as e:
@@ -232,7 +277,7 @@ class StreamlitApp:
         # Fetch songs from the database
         try:
             # Fetch songs dynamically (can be cached for improved performance)
-            songs = self.db_manager.fetch_item()
+            songs = self.db_manager_data.fetch_item()
 
             if songs:
                 st.info("Songs found in the database:")

@@ -5,8 +5,8 @@ from dynaconf import settings
 aws_access_key = settings.AWS_ACCESS_KEY_ID
 aws_secret_key = settings.AWS_SECRET_ACCESS_KEY
 aws_region = settings.AWS_REGION
-table_name_fingerprints = settings.AWS_TABLE_NAME_HASHES
-table_name_data = settings.AWS_TABLE_NAME_SONGDATA
+table_name_fingerprints = settings.AWS_TABLE_NAME_SONGDATA
+table_name_data = settings.AWS_TABLE_NAME_HASHES
 bucket_name = settings.AWS_BUCKET_NAME
 user_table_name = settings.AWS_USER_TABLE_NAME
 

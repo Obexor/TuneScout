@@ -36,6 +36,7 @@ class AmazonDBConnectivity:
         self.table_name = table_name
         self.current_song_id = 0
 
+
     def test_connectivity(self):
         try:
             response = self.dynamodb_client.list_tables()
@@ -136,13 +137,31 @@ class AmazonDBConnectivity:
             print(f"Failed to store hashes: {e.response['Error']['Message']}")
 
     def find_song_by_hashes(self, hashes):
+        """
+        Finds a song in the DynamoDB table by matching its hashes.
+
+        :param hashes: List of tuples (Hash, Offset) or dictionaries with keys "Hash" and "Offset".
+        :return: Filtered item if a match is found; otherwise, None.
+        """
         try:
             for hash_item in hashes:
+                # If hash_item is a tuple, extract the values
+                if isinstance(hash_item, tuple):
+                    hash_value = hash_item[0]  # Extract the hash value
+                    # Offset is not needed for comparison here
+                elif isinstance(hash_item, dict):
+                    hash_value = hash_item.get("Hash")  # Extract from dictionary
+                else:
+                    print("Invalid hash_item format. Skipping...")
+                    continue
+
+                # Fetch all items in the table
                 result = self.fetch_item()
                 if result:
                     for item in result:
-                        if item.get("Hash") == hash_item.get("Hash"):
-                            # Remove 'offset' and 'Hash' from the item
+                        # Compare the hash (item being checked is always a dictionary)
+                        if item.get("Hash") == hash_value:
+                            # Remove unwanted keys before returning match
                             filtered_item = {k: v for k, v in item.items() if k not in ["s3_key", "Hash"]}
                             return filtered_item
             return None
@@ -159,37 +178,38 @@ class AmazonDBConnectivity:
 
     def store_metadata_in_songs_table(self, song_id, song_data):
         """
-        Stores song metadata in the SongsFingerprints table.
+        Stores song metadata in the dynamically specified table during initialization.
 
         :param song_id: Unique Song ID.
         :param song_data: Dictionary containing song metadata (artist, title, album, etc.).
         """
         try:
-            table = self.dynamodb_resource.Table('SongsFingerprints')
-            song_data["SongID"] = str(song_id)
-            table.put_item(Item=song_data)
-            print("Metadata stored successfully in SongsFingerprints table.")
+            table = self.dynamodb_resource.Table(self.table_name)  # Dynamically use the table name
+            song_data["SongID"] = str(song_id)  # Include the Song ID
+            table.put_item(Item=song_data)  # Insert the item into the table
+            print("Metadata stored successfully in the table.")
         except (BotoCoreError, ClientError) as e:
-            print("Failed to store metadata in SongsFingerprints table:", e)
+            print(f"Failed to store metadata in the table '{self.table_name}': {e}")
 
     def store_fingerprints_in_hashes_table(self, song_id, fingerprints):
         """
-        Stores song fingerprints in the Hashes table.
+        Stores song fingerprints in the dynamically specified table.
 
         :param song_id: Unique Song ID associated with the fingerprints.
-        :param fingerprints: List of dictionaries, each containing a hash and its offset.
+        :param fingerprints: List of tuples, each containing a hash value and its offset.
         """
         try:
-
-            table = self.dynamodb_resource.Table('Hashes')
+            table = self.dynamodb_resource.Table(self.table_name)  # Dynamically use the Hashes table
             for fingerprint in fingerprints:
                 fingerprint_data = {
-                    "Hash": fingerprint[0],
-                    "Offset": fingerprint[1],
-                    "SongID": str(song_id)
+                    "Hash": fingerprint[0],  # Hash value
+                    "Offset": fingerprint[1],  # Time offset
+                    "SongID": str(song_id)  # Associated Song ID
                 }
-                table.put_item(Item=fingerprint_data)
-            print("Fingerprints stored successfully in Hashes table.")
+                table.put_item(Item=fingerprint_data)  # Insert the item into the table
+            print(f"Fingerprints stored successfully in the table '{self.table_name}'.")
         except (BotoCoreError, ClientError) as e:
-            print("Failed to store fingerprints in Hashes table:", e)
+            print(f"Failed to store fingerprints in the table '{self.table_name}': {e}")
+
+
 
